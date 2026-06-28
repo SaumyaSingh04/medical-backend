@@ -128,15 +128,33 @@ class BlogRepository {
   async findAll(filter = {}, options = {}) {
     const { sort = { createdAt: -1 }, skip = 0, limit = 20, populate = [], select } = options;
     const include = toInclude(populate);
-    const prismaSelect = select ? toSelect(select) : undefined;
+
+    // Prisma cannot use include and select simultaneously.
+    // When populate (include) is requested, merge selected scalar fields into the include block.
+    let query;
+    if (include && select) {
+      const scalarSelect = toSelect(select);
+      // Merge scalar selections into include so author sub-select is preserved
+      query = {
+        select: {
+          ...scalarSelect,
+          ...include, // spreads e.g. { author: { select: {...} } }
+        },
+      };
+    } else if (include) {
+      query = { include };
+    } else if (select) {
+      query = { select: toSelect(select) };
+    } else {
+      query = {};
+    }
 
     const rows = await prisma.blog.findMany({
       where: toWhere(filter),
       orderBy: toOrderBy(sort),
       skip,
       take: limit,
-      ...(include     ? { include }      : {}),
-      ...(prismaSelect ? { select: prismaSelect } : {}),
+      ...query,
     });
     return toMongoMany(rows);
   }

@@ -54,7 +54,6 @@ function toWhere(filter = {}) {
   const where = {};
   for (const [k, v] of Object.entries(filter)) {
     if (k === '_id' || k === 'id') { where.id = v; continue; }
-    if (k === 'category')          { where.categoryId = v; continue; }
     where[k] = v;
   }
   return where;
@@ -139,40 +138,40 @@ class ProductRepository {
 
   // ── Product-specific ──────────────────────────────────────────────────────
 
-  // Full-text search using ILIKE across name/description/brand/tags
-  async search(query, filter = {}, _sort, skip = 0, limit = 20) {
-    const where = toWhere(filter);
-    if (query) {
-      where.OR = [
-        { name:        { contains: query, mode: 'insensitive' } },
-        { description: { contains: query, mode: 'insensitive' } },
-        { brand:       { contains: query, mode: 'insensitive' } },
-        { tags:        { has: query.toLowerCase() } },
-      ];
-    }
-    const rows = await prisma.product.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      include: { category: { select: { id: true, name: true, slug: true } } },
-    });
-    return rows.map(toMongo);
-  }
-
   async buildFilter(queryParams) {
-    const filter = { isActive: true };
-    if (queryParams.category)   filter.category = queryParams.category;
-    if (queryParams.brand)      filter.brand = { contains: queryParams.brand, mode: 'insensitive' };
+    const filter = {};
+
+    // isActive: default true for public listing; skip filter if explicitly undefined
+    if (queryParams.isActive !== undefined) {
+      filter.isActive = queryParams.isActive !== 'false';
+    } else {
+      filter.isActive = true;
+    }
+
+    if (queryParams.category)    filter.categoryId = queryParams.category;
+    if (queryParams.subcategory) filter.subcategoryId = queryParams.subcategory;
+    if (queryParams.brand)       filter.brand = { contains: queryParams.brand, mode: 'insensitive' };
+
     if (queryParams.minPrice || queryParams.maxPrice) {
       filter.price = {};
       if (queryParams.minPrice) filter.price.gte = Number(queryParams.minPrice);
       if (queryParams.maxPrice) filter.price.lte = Number(queryParams.maxPrice);
     }
-    if (queryParams.minRating)        filter.averageRating = { gte: Number(queryParams.minRating) };
-    if (queryParams.inStock === 'true') filter.stock = { gt: 0 };
+
+    if (queryParams.minRating)           filter.averageRating = { gte: Number(queryParams.minRating) };
+    if (queryParams.inStock === 'true')  filter.stock = { gt: 0 };
     if (queryParams.isFeatured === 'true') filter.isFeatured = true;
-    if (queryParams.tags)       filter.tags = { hasSome: queryParams.tags.split(',') };
+    if (queryParams.tags)                filter.tags = { hasSome: queryParams.tags.split(',').map(t => t.trim()) };
+
+    // full-text search across name / description / brand
+    if (queryParams.q) {
+      filter.OR = [
+        { name:        { contains: queryParams.q, mode: 'insensitive' } },
+        { description: { contains: queryParams.q, mode: 'insensitive' } },
+        { brand:       { contains: queryParams.q, mode: 'insensitive' } },
+      ];
+    }
+
     return filter;
   }
 

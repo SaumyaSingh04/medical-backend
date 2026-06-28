@@ -10,7 +10,7 @@ const { PAGINATION } = require('../constants');
 const parsePagination = (query = {}) => {
   const page = Math.max(1, parseInt(query.page, 10) || PAGINATION.DEFAULT_PAGE);
   const limit = Math.min(
-    parseInt(query.limit, 10) || PAGINATION.DEFAULT_LIMIT,
+    Math.max(1, parseInt(query.limit, 10) || PAGINATION.DEFAULT_LIMIT),
     PAGINATION.MAX_LIMIT
   );
   const skip = (page - 1) * limit;

@@ -73,17 +73,11 @@ class AdminService {
 
   async listProducts(queryParams) {
     const { page, limit, skip } = parsePagination(queryParams);
-    const filter = {};
-    if (queryParams.category) filter.category = queryParams.category;
-    if (queryParams.isActive !== undefined) filter.isActive = queryParams.isActive === 'true';
-
-    if (queryParams.search) {
-      const [products, total] = await Promise.all([
-        productRepo.search(queryParams.search, filter, undefined, skip, limit),
-        productRepo.count(filter),
-      ]);
-      return { products, meta: buildPaginationMeta(total, page, limit) };
-    }
+    const filter = await productRepo.buildFilter({
+      ...queryParams,
+      q: queryParams.search,           // admin uses 'search', buildFilter uses 'q'
+      isActive: queryParams.isActive,  // pass-through, default true
+    });
 
     const [products, total] = await Promise.all([
       productRepo.findAll(filter, { sort: { createdAt: -1 }, skip, limit }),

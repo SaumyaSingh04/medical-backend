@@ -16,14 +16,14 @@ const cache = (ttl, keyFn = null) => {
     const cached = await cacheService.get(key);
 
     if (cached) {
-      return res.status(200).json({ ...cached, fromCache: true });
+      return res.status(200).json(cached);
     }
 
     // Intercept res.json to cache the response
     const originalJson = res.json.bind(res);
-    res.json = async (body) => {
-      if (res.statusCode === 200 && body.success) {
-        await cacheService.set(key, body, ttl);
+    res.json = (body) => {
+      if (res.statusCode === 200 && body?.success) {
+        cacheService.set(key, body, ttl).catch(() => {});
       }
       return originalJson(body);
     };

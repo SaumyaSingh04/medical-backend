@@ -20,11 +20,6 @@ const getProductById = asyncHandler(async (req, res) => {
   sendSuccess(res, MESSAGES.FETCHED, product);
 });
 
-const searchProducts = asyncHandler(async (req, res) => {
-  const { products, meta } = await productService.searchProducts(req.query.q, req.query);
-  sendPaginated(res, MESSAGES.FETCHED, products, meta);
-});
-
 const getFeaturedProducts = asyncHandler(async (req, res) => {
   const products = await productService.getFeaturedProducts(parseInt(req.query.limit, 10) || 8);
   sendSuccess(res, MESSAGES.FETCHED, products);
@@ -50,4 +45,4 @@ const deleteProductImage = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Image deleted.');
 });
 
-module.exports = { listProducts, getProduct, getProductById, searchProducts, getFeaturedProducts, createProduct, updateProduct, deleteProduct, deleteProductImage };
+module.exports = { listProducts, getProduct, getProductById, getFeaturedProducts, createProduct, updateProduct, deleteProduct, deleteProductImage };

@@ -17,8 +17,7 @@ class ProductService {
     const [products, total] = await Promise.all([
       productRepo.findAll(filter, {
         sort, skip, limit,
-        populate: [{ path: 'category', select: 'name slug' }],
-        select: 'name slug price compareAtPrice thumbnail averageRating ratingCount stock isFeatured isActive category',
+        populate: [{ path: 'category' }, { path: 'subcategory' }],
       }),
       productRepo.count(filter),
     ]);
@@ -96,17 +95,7 @@ class ProductService {
     return productRepo.removeImage(productId, publicId);
   }
 
-  async searchProducts(query, queryParams) {
-    const { page, limit, skip } = parsePagination(queryParams);
-    const filter = await productRepo.buildFilter(queryParams);
-    const [products, total] = await Promise.all([
-      productRepo.search(query, filter, undefined, skip, limit),
-      productRepo.count(filter),
-    ]);
-    return { products, meta: buildPaginationMeta(total, page, limit) };
-  }
-
-  async getFeaturedProducts(limit = 6) {
+async getFeaturedProducts(limit = 6) {
     const featured = await productRepo.findAll({ isFeatured: true, isActive: true }, {
       limit, sort: { averageRating: -1, ratingCount: -1 },
       select: 'name slug price compareAtPrice thumbnail averageRating ratingCount stock isFeatured category',
