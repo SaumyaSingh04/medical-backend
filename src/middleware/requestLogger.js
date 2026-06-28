@@ -12,11 +12,7 @@ const requestLogger = (req, res, next) => {
     const duration = Date.now() - start;
     const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'http';
 
-    logger[level]({
-      method: req.method,
-      url: req.originalUrl,
-      status: res.statusCode,
-      duration: `${duration}ms`,
+    logger[level](`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`, {
       ip: req.ip,
       userId: req.user?.id || 'anonymous',
       userAgent: req.headers['user-agent'],
