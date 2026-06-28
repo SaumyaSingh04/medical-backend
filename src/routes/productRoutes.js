@@ -438,6 +438,34 @@ router.get('/featured', cache(CACHE_TTL.PRODUCT_LIST), ctrl.getFeaturedProducts)
 
 /**
  * @swagger
+ * /products/id/{id}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get product by UUID (Admin / internal)
+ *     description: Returns full product detail by UUID. Useful for admin edit screens.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Product UUID
+ *         example: 550e8400-e29b-41d4-a716-446655440000
+ *     responses:
+ *       200:
+ *         description: Product detail
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ProductDetailResponse'
+ *       401: { description: Unauthorized }
+ *       404: { description: Product not found }
+ */
+router.get('/id/:id', authenticate, authorize(ROLES.ADMIN), ctrl.getProductById);
+
+/**
+ * @swagger
  * /products/{slug}:
  *   get:
  *     tags: [Products]

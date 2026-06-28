@@ -1,6 +1,7 @@
 'use strict';
 
 const prisma = require('./prismaClient');
+const categoryRepo = require('./categoryRepo');
 
 // ─── Shape adapter ────────────────────────────────────────────────────────────
 // Services access: product._id, product.price, product.name, product.slug,
@@ -151,8 +152,13 @@ class ProductRepository {
       filter.isActive = true;
     }
 
-    if (queryParams.category)    filter.categoryId = queryParams.category;
-    if (queryParams.subcategory) filter.subcategoryId = queryParams.subcategory;
+    if (queryParams.subcategory) {
+      filter.subcategoryId = queryParams.subcategory;
+    } else if (queryParams.category) {
+      const all = await categoryRepo.findWithDescendants(queryParams.category);
+      const ids = all.map((c) => c.id);
+      filter.categoryId = { in: ids };
+    }
     if (queryParams.brand)       filter.brand = { contains: queryParams.brand, mode: 'insensitive' };
 
     if (queryParams.minPrice || queryParams.maxPrice) {
