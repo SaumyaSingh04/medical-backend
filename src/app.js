@@ -13,6 +13,7 @@ const routes = require('./routes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { requestLogger } = require('./middleware/requestLogger');
 const { generalLimiter } = require('./middleware/rateLimiter');
+const { analyticsMiddleware } = require('./middleware/analyticsMiddleware');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -80,6 +81,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 // ─── Rate Limiting ───────────────────────────────────────────────────────────
 app.use(generalLimiter);
+
+// ─── Analytics Tracking ──────────────────────────────────────────────────────
+app.use(analyticsMiddleware);
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

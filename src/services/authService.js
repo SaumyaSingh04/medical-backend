@@ -7,9 +7,10 @@ const { generateOTP, hashOTP, compareOTP } = require('../utils/otpUtils');
 const { sendEmail } = require('../utils/mailer');
 const ApiError = require('../helpers/ApiError');
 const { MESSAGES, TOKEN_TYPE, ROLES } = require('../constants');
+const analytics = require('./analyticsService');
 
 class AuthService {
-  async register({ firstName, lastName, email, phone, password, address, pincode, landmark, city, state }) {
+  async register({ firstName, lastName, email, phone, password, address, pincode, landmark, city, state }, req) {
     const exists = await userRepo.findByEmail(email);
     if (exists) throw ApiError.conflict(MESSAGES.EMAIL_ALREADY_EXISTS);
 
@@ -34,6 +35,9 @@ class AuthService {
 
     const user = await userRepo.create(userData);
 
+    // Track registration (fire-and-forget)
+    if (req) analytics.track(() => analytics.trackRegistration(req, user.id, email));
+
     // Send verification email
     const verifyToken_ = generateToken({ userId: user.id }, TOKEN_TYPE.EMAIL_VERIFY);
     const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verifyToken_}`;
@@ -47,7 +51,7 @@ class AuthService {
     return { user: user.toPublicJSON() };
   }
 
-  async login({ email, password }) {
+  async login({ email, password }, req) {
     const user = await userRepo.findByEmail(email);
     if (!user) throw ApiError.unauthorized(MESSAGES.INVALID_CREDENTIALS);
     if (!user.isActive) throw ApiError.forbidden(MESSAGES.ACCOUNT_INACTIVE);
@@ -56,7 +60,7 @@ class AuthService {
     const isMatch = await user.comparePassword(password);
     
     if (!isMatch) {
-      await this._handleFailedLogin(user);
+      await this._handleFailedLogin(user, email, req);
       throw ApiError.unauthorized(MESSAGES.INVALID_CREDENTIALS);
     }
 
@@ -72,20 +76,39 @@ class AuthService {
       await userRepo.updateById(user.id, { loginAttempts: 0, lockUntil: null });
     }
 
+    // Track successful login — attach sessionId to req for middleware
+    if (req) {
+      req.analyticsUserId = user.id;
+      analytics.track(async () => {
+        const sessionId = await analytics.trackLogin(req, {
+          userId: user.id, email, success: true, sessionToken: refreshToken,
+        });
+        req.analyticsSessionId = sessionId;
+      });
+    }
+
     return { accessToken, refreshToken, user: user.toPublicJSON() };
   }
 
-  async _handleFailedLogin(user) {
+  async _handleFailedLogin(user, email, req) {
     const MAX_ATTEMPTS = 5;
     const LOCK_DURATION_MS = 30 * 60 * 1000; // 30 min
     const attempts = (user.loginAttempts || 0) + 1;
     const update = { loginAttempts: attempts };
     if (attempts >= MAX_ATTEMPTS) update.lockUntil = new Date(Date.now() + LOCK_DURATION_MS);
     await userRepo.updateById(user.id, update);
+
+    if (req) {
+      const reason = attempts >= MAX_ATTEMPTS ? 'account_locked' : 'invalid_password';
+      analytics.track(() => analytics.trackLogin(req, {
+        userId: user.id, email: email || user.email, success: false, failReason: reason,
+      }));
+    }
   }
 
-  async logout(userId, refreshToken) {
+  async logout(userId, refreshToken, req) {
     await userRepo.removeRefreshToken(userId, refreshToken);
+    analytics.track(() => analytics.trackLogout(userId));
   }
 
   async refreshAccessToken(refreshToken) {

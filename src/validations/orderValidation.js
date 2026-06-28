@@ -8,12 +8,11 @@ const placeOrder = Joi.object({
     productId: Joi.string().required(),
     name: Joi.string().optional(),
     price: Joi.number().optional(),
-    variantId: Joi.string().hex().length(24).optional(),
+    variantId: Joi.string().optional(),
     quantity: Joi.number().integer().min(1).required(),
   })).min(1).required(),
-  shippingAddressId: Joi.string().hex().length(24).required(),
-  paymentMethod: Joi.string().valid(PAYMENT_METHOD.COD).required(), // only COD active — razorpay, stripe, wallet commented out
-  // paymentMethod: Joi.string().valid(...Object.values(PAYMENT_METHOD)).required(),
+  shippingAddressId: Joi.string().required(),
+  paymentMethod: Joi.string().valid(PAYMENT_METHOD.COD).required(),
   couponCode: Joi.string().uppercase().optional(),
   customerNote: Joi.string().max(500).optional(),
 });
@@ -24,11 +23,11 @@ const updateStatus = Joi.object({
 });
 
 const cancelOrder = Joi.object({
-  reason: Joi.string().min(5).max(500).required(),
+  reason: Joi.string().min(3).max(500).optional(),
 });
 
 const returnOrder = Joi.object({
-  reason: Joi.string().min(5).max(500).required(),
+  reason: Joi.string().min(3).max(500).required(),
 });
 
 module.exports = { placeOrder, updateStatus, cancelOrder, returnOrder };

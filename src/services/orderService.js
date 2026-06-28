@@ -115,14 +115,14 @@ class OrderService {
   async getOrderById(orderId, userId, role) {
     const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (role !== 'admin' && order.user.toString() !== userId) throw ApiError.forbidden();
+    if (role !== 'admin' && order.user !== userId) throw ApiError.forbidden();
     return order;
   }
 
   async cancelOrder(orderId, userId, reason) {
     const order = await orderRepo.findById(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (order.user.toString() !== userId) throw ApiError.forbidden();
+    if (order.user !== userId) throw ApiError.forbidden();
 
     const cancellable = [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED];
     if (!cancellable.includes(order.status)) throw ApiError.badRequest(MESSAGES.ORDER_CANCEL_FORBIDDEN);
@@ -147,7 +147,7 @@ class OrderService {
   async requestReturn(orderId, userId, reason) {
     const order = await orderRepo.findById(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (order.user.toString() !== userId) throw ApiError.forbidden();
+    if (order.user !== userId) throw ApiError.forbidden();
     if (order.status !== ORDER_STATUS.DELIVERED) throw ApiError.badRequest('Only delivered orders can be returned.');
 
     return orderRepo.updateById(orderId, {
@@ -175,7 +175,7 @@ class OrderService {
   async confirmCodOrder(orderId, userId) {
     const order = await orderRepo.findById(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (order.user.toString() !== userId) throw ApiError.forbidden();
+    if (order.user !== userId) throw ApiError.forbidden();
     if (order.paymentMethod !== PAYMENT_METHOD.COD) throw ApiError.badRequest('Not a COD order.');
     if (order.paymentStatus === PAYMENT_STATUS.PAID) throw ApiError.badRequest('COD charge already confirmed.');
 

@@ -53,6 +53,7 @@ const options = {
       { name: 'Admin', description: 'Admin panel endpoints' },
       { name: 'Notifications', description: 'User notifications' },
       { name: 'Blogs', description: 'Blog post management' },
+      { name: 'Analytics', description: 'User analytics & activity tracking — Admin only' },
     ],
   },
   apis: [

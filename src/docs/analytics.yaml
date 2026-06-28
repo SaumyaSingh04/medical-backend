@@ -1,0 +1,711 @@
+openapi: 3.0.0
+info:
+  title: Analytics API
+  version: 1.0.0
+
+tags:
+  - name: Analytics
+    description: User analytics & activity tracking — Admin only
+
+components:
+  schemas:
+    AnalyticsSummary:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+          example: 1240
+        newUsersToday:
+          type: integer
+          example: 12
+        newUsersThisWeek:
+          type: integer
+          example: 84
+        newUsersThisMonth:
+          type: integer
+          example: 310
+        activeUsersToday:
+          type: integer
+          example: 47
+        totalLogins:
+          type: integer
+          example: 5820
+        successfulLogins:
+          type: integer
+          example: 5750
+        failedLogins:
+          type: integer
+          example: 70
+        currentlyActiveUsers:
+          type: integer
+          example: 9
+        avgSessionDurationSeconds:
+          type: integer
+          example: 420
+
+    LoginGraphPoint:
+      type: object
+      properties:
+        period:
+          type: string
+          format: date-time
+          example: '2026-06-28T00:00:00.000Z'
+        total:
+          type: integer
+          example: 38
+        successful:
+          type: integer
+          example: 35
+        failed:
+          type: integer
+          example: 3
+
+    RegistrationTrendPoint:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date-time
+          example: '2026-06-28T00:00:00.000Z'
+        count:
+          type: integer
+          example: 14
+
+    ActiveUser:
+      type: object
+      properties:
+        userId:
+          type: string
+          example: e3fb753c-616f-4ae1-82b1-74b8cc5c032c
+        firstName:
+          type: string
+          example: Saumya
+        lastName:
+          type: string
+          example: Singh
+        email:
+          type: string
+          example: saumya@example.com
+        actions:
+          type: integer
+          example: 142
+
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 94b3c552-5dc5-4bd2-8c21-7d2484d28c18
+        userId:
+          type: string
+          nullable: true
+          example: e3fb753c-616f-4ae1-82b1-74b8cc5c032c
+        action:
+          type: string
+          example: login
+        entity:
+          type: string
+          nullable: true
+          example: order
+        entityId:
+          type: string
+          nullable: true
+          example: ord_001
+        method:
+          type: string
+          example: POST
+        endpoint:
+          type: string
+          example: /api/v1/auth/login
+        statusCode:
+          type: integer
+          example: 200
+        ipAddress:
+          type: string
+          example: 1.2.3.4
+        userAgent:
+          type: string
+          example: Mozilla/5.0
+        meta:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        user:
+          type: object
+          nullable: true
+          properties:
+            firstName: { type: string }
+            lastName: { type: string }
+            email: { type: string }
+
+    LoginHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 23d577a3-c5de-4f15-89b6-37aa6c7a5fa4
+        userId:
+          type: string
+          nullable: true
+        email:
+          type: string
+          example: saumya@example.com
+        success:
+          type: boolean
+          example: true
+        failReason:
+          type: string
+          nullable: true
+          example: invalid_password
+        ipAddress:
+          type: string
+          example: 1.2.3.4
+        userAgent:
+          type: string
+          example: Mozilla/5.0
+        device:
+          type: string
+          example: desktop
+        browser:
+          type: string
+          example: Chrome
+        os:
+          type: string
+          example: Windows
+        country:
+          type: string
+          nullable: true
+          example: India
+        city:
+          type: string
+          nullable: true
+          example: Mumbai
+        sessionId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    RegistrationLog:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        email:
+          type: string
+          example: saumya@example.com
+        ipAddress:
+          type: string
+          example: 1.2.3.4
+        device:
+          type: string
+          example: desktop
+        browser:
+          type: string
+          example: Chrome
+        os:
+          type: string
+          example: Windows
+        country:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum: [web, mobile, api]
+          example: web
+        createdAt:
+          type: string
+          format: date-time
+
+    UserSession:
+      type: object
+      properties:
+        id:
+          type: string
+          example: cb2c62d3-9513-4d42-8be9-aec74a8b6441
+        userId:
+          type: string
+          nullable: true
+        ipAddress:
+          type: string
+          example: 1.2.3.4
+        device:
+          type: string
+          example: desktop
+        browser:
+          type: string
+          example: Chrome
+        os:
+          type: string
+          example: Windows
+        country:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+          example: true
+        loginAt:
+          type: string
+          format: date-time
+        logoutAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastActivityAt:
+          type: string
+          format: date-time
+        durationSeconds:
+          type: integer
+          nullable: true
+          example: 420
+
+    PaginatedMeta:
+      type: object
+      properties:
+        pagination:
+          type: object
+          properties:
+            total: { type: integer, example: 200 }
+            page: { type: integer, example: 1 }
+            limit: { type: integer, example: 20 }
+            totalPages: { type: integer, example: 10 }
+            hasNextPage: { type: boolean, example: true }
+            hasPrevPage: { type: boolean, example: false }
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+      description: Page number
+    LimitParam:
+      name: limit
+      in: query
+      schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      description: Items per page
+    StartDateParam:
+      name: startDate
+      in: query
+      schema: { type: string, format: date, example: '2026-01-01' }
+      description: Filter from this date (inclusive)
+    EndDateParam:
+      name: endDate
+      in: query
+      schema: { type: string, format: date, example: '2026-12-31' }
+      description: Filter up to this date (inclusive)
+    UserIdParam:
+      name: userId
+      in: query
+      schema: { type: string }
+      description: Filter by user ID
+
+paths:
+  /analytics/summary:
+    get:
+      tags: [Analytics]
+      summary: Dashboard analytics summary
+      description: >
+        Returns aggregated counts — total users, new users (today/week/month),
+        active sessions, login counts (total/success/failed), currently active users,
+        and average session duration. **Admin only.**
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Analytics summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Analytics summary }
+                  data: { $ref: '#/components/schemas/AnalyticsSummary' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized — missing or invalid token
+        '403':
+          description: Forbidden — Admin or Super Admin only
+
+  /analytics/graph/logins:
+    get:
+      tags: [Analytics]
+      summary: Login graph data
+      description: >
+        Returns time-series login counts grouped by day (last 30 days),
+        week (last 6 weeks), or month (last 12 months). Each point includes
+        total, successful, and failed login counts. **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [daily, weekly, monthly]
+            default: daily
+          description: Grouping period
+      responses:
+        '200':
+          description: Login graph data points
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Login graph }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/LoginGraphPoint' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/graph/registrations:
+    get:
+      tags: [Analytics]
+      summary: Registration trend
+      description: >
+        Returns daily registration counts for the past N days (default 30, max 365).
+        **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 30, minimum: 1, maximum: 365 }
+          description: Number of past days to include
+      responses:
+        '200':
+          description: Daily registration trend
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Registration trend }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/RegistrationTrendPoint' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/most-active-users:
+    get:
+      tags: [Analytics]
+      summary: Most active users
+      description: >
+        Returns the top N users ranked by total activity log entries (actions performed).
+        **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, minimum: 1, maximum: 50 }
+          description: Number of users to return
+      responses:
+        '200':
+          description: Most active users list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Most active users }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActiveUser' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/recent-activities:
+    get:
+      tags: [Analytics]
+      summary: Recent user activities
+      description: >
+        Returns the most recent N activity log entries across all users, including
+        the associated user's name and email. **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+          description: Number of recent activities to return
+      responses:
+        '200':
+          description: Recent activity log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Recent activities }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActivityLog' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/login-history:
+    get:
+      tags: [Analytics]
+      summary: Login history
+      description: >
+        Returns paginated login attempt records (both successful and failed).
+        Supports filtering by user, success status, and date range. **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/UserIdParam'
+        - $ref: '#/components/parameters/StartDateParam'
+        - $ref: '#/components/parameters/EndDateParam'
+        - name: success
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+          description: Filter by login success status
+      responses:
+        '200':
+          description: Paginated login history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Login history }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/LoginHistory' }
+                  meta: { $ref: '#/components/schemas/PaginatedMeta' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/registration-history:
+    get:
+      tags: [Analytics]
+      summary: Registration history
+      description: >
+        Returns paginated registration log records including device, browser, OS,
+        IP address, source (web/mobile/api), and location data. **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/StartDateParam'
+        - $ref: '#/components/parameters/EndDateParam'
+      responses:
+        '200':
+          description: Paginated registration history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Registration history }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/RegistrationLog' }
+                  meta: { $ref: '#/components/schemas/PaginatedMeta' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/activity-history:
+    get:
+      tags: [Analytics]
+      summary: User activity history
+      description: >
+        Returns paginated activity log records for all tracked actions
+        (login, logout, register, order_create, profile_update, etc.).
+        Supports filtering by user, action type, and date range. **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/UserIdParam'
+        - $ref: '#/components/parameters/StartDateParam'
+        - $ref: '#/components/parameters/EndDateParam'
+        - name: action
+          in: query
+          schema:
+            type: string
+            enum:
+              - login
+              - logout
+              - register
+              - profile_update
+              - password_change
+              - password_reset
+              - email_verification
+              - forgot_password
+              - order_create
+              - order_status_update
+              - payment_initiate
+              - cart_update
+              - review_create
+              - review_update
+              - review_delete
+              - product_create
+              - product_update
+              - product_delete
+              - category_create
+              - category_update
+              - category_delete
+              - blog_create
+              - blog_update
+              - blog_delete
+              - coupon_create
+              - wishlist_update
+              - address_add
+              - address_update
+              - address_delete
+              - view
+              - create
+              - update
+              - delete
+              - api_access
+          description: Filter by action type
+      responses:
+        '200':
+          description: Paginated activity history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Activity history }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ActivityLog' }
+                  meta: { $ref: '#/components/schemas/PaginatedMeta' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/session-history:
+    get:
+      tags: [Analytics]
+      summary: Session history
+      description: >
+        Returns paginated user session records including login/logout timestamps,
+        session duration, device info, and active status. **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/UserIdParam'
+        - $ref: '#/components/parameters/StartDateParam'
+        - $ref: '#/components/parameters/EndDateParam'
+        - name: isActive
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+          description: Filter by session active status
+      responses:
+        '200':
+          description: Paginated session history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: Session history }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/UserSession' }
+                  meta: { $ref: '#/components/schemas/PaginatedMeta' }
+                  timestamp: { type: string, format: date-time }
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+
+  /analytics/export:
+    get:
+      tags: [Analytics]
+      summary: Export analytics data as CSV
+      description: >
+        Exports up to 10,000 rows of the selected data type as a downloadable CSV file.
+        The response `Content-Disposition` header triggers a browser file download.
+        **Admin only.**
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [login, registration, session, activity]
+            default: activity
+          description: Data type to export
+        - $ref: '#/components/parameters/StartDateParam'
+        - $ref: '#/components/parameters/EndDateParam'
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [csv]
+            default: csv
+          description: Export format (currently CSV only)
+      responses:
+        '200':
+          description: CSV file download
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'attachment; filename="activity-export-1719532800000.csv"'
+          content:
+            text/csv:
+              schema:
+                type: string
+                example: |
+                  id,userId,action,method,endpoint,statusCode,ipAddress,createdAt
+                  "abc123","user1","login","POST","/api/v1/auth/login","200","1.2.3.4","2026-06-28T00:00:00.000Z"
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden

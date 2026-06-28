@@ -28,12 +28,12 @@ function toMongo(row) {
 
 function itemToMongo(item) {
   if (!item) return null;
-  const { id, orderId, productId, variantId, variantName, variantColor, variantSize, price, compareAtPrice, totalPrice, ...rest } = item;
+  const { id, orderId, productId, variantId, variantName, variantColor, variantSize, price, compareAtPrice, totalPrice, product, ...rest } = item;
   return {
     ...rest,
     _id: id,
     id,
-    product: productId ?? null,
+    product: product ? { ...product, _id: product.id } : (productId ?? null),
     variant: variantId ?? null,
     variantDetails: (variantName || variantColor || variantSize)
       ? { name: variantName, color: variantColor, size: variantSize }

@@ -78,6 +78,8 @@ class UserRepository {
 
   async create(data) {
     const out = toPrismaData(data);
+    // Normalize email to lowercase before storing
+    if (out.email) out.email = out.email.toLowerCase();
     if (out.password) {
       const bcrypt = require('bcryptjs');
       const salt = await bcrypt.genSalt(12);
@@ -204,15 +206,20 @@ class UserRepository {
     await prisma.user.update({ where: { id: userId }, data: { otpAttempts: { increment: 1 } } });
   }
 
-  async searchUsers(search) {
+  async searchUsers(search, filter = {}, skip = 0, limit = 20) {
+    const where = toWhere(filter);
     return prisma.user.findMany({
       where: {
+        ...where,
         OR: [
           { firstName: { contains: search, mode: 'insensitive' } },
           { lastName: { contains: search, mode: 'insensitive' } },
           { email: { contains: search, mode: 'insensitive' } },
         ],
       },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
     });
   }
 }

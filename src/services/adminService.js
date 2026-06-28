@@ -41,12 +41,12 @@ class AdminService {
     if (queryParams.role) filter.role = queryParams.role;
 
     if (queryParams.search) {
+      const searchFilter = { ...filter };
       const [users, total] = await Promise.all([
-        userRepo.searchUsers(queryParams.search),
-        userRepo.count({ role: queryParams.role }),
+        userRepo.searchUsers(queryParams.search, searchFilter, skip, limit),
+        userRepo.count(searchFilter),
       ]);
-      const paged = users.slice(skip, skip + limit);
-      return { users: paged, meta: buildPaginationMeta(total, page, limit) };
+      return { users, meta: buildPaginationMeta(total, page, limit) };
     }
 
     const [users, total] = await Promise.all([

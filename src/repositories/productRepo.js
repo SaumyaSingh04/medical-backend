@@ -39,12 +39,15 @@ function withId(arr) {
 
 // ─── Input adapter ────────────────────────────────────────────────────────────
 function toPrismaData(data) {
-  const { thumbnail, _id, __v, ...rest } = data;
+  const { thumbnail, _id, __v, category, subcategory, ...rest } = data;
   const out = { ...rest };
   if (thumbnail !== undefined) {
     out.thumbnailUrl       = thumbnail?.url ?? null;
     out.thumbnailPublicId  = thumbnail?.publicId ?? null;
   }
+  // Validation sends 'category'/'subcategory' as UUIDs; Prisma schema needs 'categoryId'/'subcategoryId'
+  if (category !== undefined)    out.categoryId    = category ?? null;
+  if (subcategory !== undefined) out.subcategoryId = subcategory ?? null;
   return out;
 }
 

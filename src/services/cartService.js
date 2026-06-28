@@ -38,7 +38,7 @@ class CartService {
     if (!cart) cart = await cartRepo.create({ user: userId, items: [] });
 
     const existing = cart.items.find(
-      (i) => i.product.id === productId && (!variantId || i.variant === variantId)
+      (i) => (i.product?.id || i.product?._id) === productId && (!variantId || i.variant === variantId)
     );
 
     if (existing) {
@@ -73,7 +73,8 @@ class CartService {
     if (quantity <= 0) {
       await cartRepo.removeItem(cart.id, itemId);
     } else {
-      const product = await productRepo.findById(item.product.id);
+      const product = await productRepo.findById(item.product?.id || item.product?._id);
+      if (!product || !product.isActive) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
       const stock = item.variant
         ? product?.variants?.id(item.variant)?.stock
         : product?.stock;

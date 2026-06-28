@@ -6,12 +6,12 @@ const { HTTP_STATUS, MESSAGES } = require('../constants');
 const asyncHandler = require('../utils/asyncHandler');
 
 const register = asyncHandler(async (req, res) => {
-  const result = await authService.register(req.body);
+  const result = await authService.register(req.body, req);
   sendSuccess(res, MESSAGES.REGISTER_SUCCESS, result, HTTP_STATUS.CREATED);
 });
 
 const login = asyncHandler(async (req, res) => {
-  const { accessToken, refreshToken, user } = await authService.login(req.body);
+  const { accessToken, refreshToken, user } = await authService.login(req.body, req);
 
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,

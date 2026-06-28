@@ -16,7 +16,12 @@ class ReviewService {
       isVerifiedPurchase = !!order;
     }
 
-    return reviewRepo.create({ product: productId, user: userId, order: orderId, rating, title, comment, images, isVerifiedPurchase });
+    try {
+      return await reviewRepo.create({ product: productId, user: userId, order: orderId, rating, title, comment, images, isVerifiedPurchase });
+    } catch (err) {
+      if (err.code === 'P2002') throw ApiError.conflict('You have already reviewed this product.');
+      throw err;
+    }
   }
 
   async getProductReviews(productId, queryParams) {

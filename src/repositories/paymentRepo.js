@@ -23,6 +23,15 @@ function toPrismaData(data) {
   return out;
 }
 
+function toWhere(filter = {}) {
+  const where = {};
+  for (const [k, v] of Object.entries(filter)) {
+    if (k === '_id' || k === 'id') { where.id = v; continue; }
+    where[k] = v;
+  }
+  return where;
+}
+
 class PaymentRepository {
   async findById(id) {
     const row = await prisma.payment.findUnique({ where: { id } });
@@ -77,15 +86,6 @@ class PaymentRepository {
       },
     });
   }
-}
-
-function toWhere(filter = {}) {
-  const where = {};
-  for (const [k, v] of Object.entries(filter)) {
-    if (k === '_id' || k === 'id') { where.id = v; continue; }
-    where[k] = v;
-  }
-  return where;
 }
 
 module.exports = new PaymentRepository();

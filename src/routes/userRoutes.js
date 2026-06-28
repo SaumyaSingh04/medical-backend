@@ -14,6 +14,48 @@ router.use(authenticate);
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     Address:
+ *       type: object
+ *       properties:
+ *         id: { type: string, format: uuid, example: addr-uuid-001 }
+ *         label: { type: string, example: Home }
+ *         fullName: { type: string, example: Saumya Singh }
+ *         phone: { type: string, example: '9876543210' }
+ *         addressLine1: { type: string, example: 123 MG Road }
+ *         addressLine2: { type: string, example: Near City Mall, nullable: true }
+ *         city: { type: string, example: Mumbai }
+ *         state: { type: string, example: Maharashtra }
+ *         pincode: { type: string, example: '400001' }
+ *         country: { type: string, example: India }
+ *         isDefault: { type: boolean, example: true }
+ *     UserProfile:
+ *       type: object
+ *       properties:
+ *         id: { type: string, format: uuid }
+ *         firstName: { type: string, example: Saumya }
+ *         lastName: { type: string, example: Singh }
+ *         email: { type: string, format: email, example: saumya@example.com }
+ *         phone: { type: string, example: '9876543210', nullable: true }
+ *         role: { type: string, enum: [user, admin, super_admin], example: user }
+ *         avatarUrl: { type: string, nullable: true, example: 'https://res.cloudinary.com/demo/image/upload/avatar.jpg' }
+ *         isEmailVerified: { type: boolean, example: true }
+ *         isActive: { type: boolean, example: true }
+ *         addresses:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/Address' }
+ *         wishlist:
+ *           type: array
+ *           items: { type: string, format: uuid }
+ *           description: Array of product IDs
+ *         lastLogin: { type: string, format: date-time, nullable: true }
+ *         createdAt: { type: string, format: date-time }
+ *         updatedAt: { type: string, format: date-time }
+ */
+
+/**
+ * @swagger
  * /users/profile:
  *   get:
  *     tags: [Users]
@@ -21,7 +63,17 @@ router.use(authenticate);
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       200: { description: User profile }
+ *       200:
+ *         description: User profile returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Fetched successfully. }
+ *                 data: { $ref: '#/components/schemas/UserProfile' }
+ *                 timestamp: { type: string, format: date-time }
  *       401: { description: Unauthorized }
  */
 router.get('/profile', ctrl.getProfile);
@@ -40,11 +92,23 @@ router.get('/profile', ctrl.getProfile);
  *           schema:
  *             type: object
  *             properties:
- *               firstName: { type: string }
- *               lastName: { type: string }
- *               phone: { type: string }
+ *               firstName: { type: string, minLength: 2, maxLength: 50, example: Saumya }
+ *               lastName: { type: string, minLength: 2, maxLength: 50, example: Singh }
+ *               phone: { type: string, example: '9876543210' }
  *     responses:
- *       200: { description: Profile updated }
+ *       200:
+ *         description: Profile updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Profile updated. }
+ *                 data: { $ref: '#/components/schemas/UserProfile' }
+ *                 timestamp: { type: string, format: date-time }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
  */
 router.put('/profile', validate(v.updateProfile), ctrl.updateProfile);
 
@@ -54,17 +118,35 @@ router.put('/profile', validate(v.updateProfile), ctrl.updateProfile);
  *   post:
  *     tags: [Users]
  *     summary: Upload profile avatar
+ *     description: Uploads a new avatar image. Accepted formats — jpeg, png, webp. Max size 2MB.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
+ *       required: true
  *       content:
  *         multipart/form-data:
  *           schema:
  *             type: object
+ *             required: [avatar]
  *             properties:
- *               avatar: { type: string, format: binary }
+ *               avatar: { type: string, format: binary, description: Image file (jpeg/png/webp, max 2MB) }
  *     responses:
- *       200: { description: Avatar uploaded }
+ *       200:
+ *         description: Avatar uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Avatar uploaded. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     avatarUrl: { type: string, example: 'https://res.cloudinary.com/demo/image/upload/avatar.jpg' }
+ *                 timestamp: { type: string, format: date-time }
+ *       400: { description: No file uploaded or invalid format }
+ *       401: { description: Unauthorized }
  */
 router.post('/avatar', avatarUpload.single('avatar'), handleMulterError, ctrl.uploadAvatar);
 
@@ -77,7 +159,20 @@ router.post('/avatar', avatarUpload.single('avatar'), handleMulterError, ctrl.up
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       200: { description: List of addresses }
+ *       200:
+ *         description: List of saved addresses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Fetched successfully. }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Address' }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
  */
 router.get('/addresses', ctrl.getAddresses);
 
@@ -97,16 +192,31 @@ router.get('/addresses', ctrl.getAddresses);
  *             type: object
  *             required: [fullName, phone, addressLine1, city, state, pincode]
  *             properties:
- *               fullName: { type: string }
- *               phone: { type: string }
- *               addressLine1: { type: string }
- *               addressLine2: { type: string }
- *               city: { type: string }
- *               state: { type: string }
- *               pincode: { type: string }
- *               isDefault: { type: boolean }
+ *               label: { type: string, example: Home }
+ *               fullName: { type: string, example: Saumya Singh }
+ *               phone: { type: string, example: '9876543210' }
+ *               addressLine1: { type: string, example: 123 MG Road }
+ *               addressLine2: { type: string, example: Near City Mall }
+ *               city: { type: string, example: Mumbai }
+ *               state: { type: string, example: Maharashtra }
+ *               pincode: { type: string, example: '400001' }
+ *               isDefault: { type: boolean, default: false }
  *     responses:
- *       200: { description: Address added }
+ *       200:
+ *         description: Address added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Address added. }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Address' }
+ *                 timestamp: { type: string, format: date-time }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
  */
 router.post('/addresses', validate(v.addAddress), ctrl.addAddress);
 
@@ -122,21 +232,41 @@ router.post('/addresses', validate(v.addAddress), ctrl.addAddress);
  *       - in: path
  *         name: addressId
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, format: uuid }
+ *         description: Address UUID (stored in the JSON addresses array)
  *     requestBody:
+ *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
  *             properties:
- *               fullName: { type: string }
- *               phone: { type: string }
- *               addressLine1: { type: string }
- *               city: { type: string }
- *               state: { type: string }
- *               pincode: { type: string }
+ *               label: { type: string, example: Office }
+ *               fullName: { type: string, example: Saumya Singh }
+ *               phone: { type: string, example: '9876543210' }
+ *               addressLine1: { type: string, example: 456 Park Street }
+ *               addressLine2: { type: string, example: Floor 2 }
+ *               city: { type: string, example: Delhi }
+ *               state: { type: string, example: Delhi }
+ *               pincode: { type: string, example: '110001' }
+ *               isDefault: { type: boolean }
  *     responses:
- *       200: { description: Address updated }
+ *       200:
+ *         description: Address updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Address updated. }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Address' }
+ *                 timestamp: { type: string, format: date-time }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       404: { description: Address not found }
  */
 router.put('/addresses/:addressId', validate(v.updateAddress), ctrl.updateAddress);
 
@@ -152,9 +282,20 @@ router.put('/addresses/:addressId', validate(v.updateAddress), ctrl.updateAddres
  *       - in: path
  *         name: addressId
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: Address deleted }
+ *       200:
+ *         description: Address deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Address deleted. }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ *       404: { description: Address not found }
  */
 router.delete('/addresses/:addressId', ctrl.deleteAddress);
 
@@ -170,9 +311,23 @@ router.delete('/addresses/:addressId', ctrl.deleteAddress);
  *       - in: path
  *         name: addressId
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: Default address set }
+ *       200:
+ *         description: Default address updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Default address set. }
+ *                 data:
+ *                   type: array
+ *                   items: { $ref: '#/components/schemas/Address' }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ *       404: { description: Address not found }
  */
 router.patch('/addresses/:addressId/default', ctrl.setDefaultAddress);
 
@@ -182,10 +337,29 @@ router.patch('/addresses/:addressId/default', ctrl.setDefaultAddress);
  *   get:
  *     tags: [Users]
  *     summary: Get wishlist
+ *     description: Returns the current user's wishlist with full product details.
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       200: { description: Wishlist items }
+ *       200:
+ *         description: Wishlist items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Fetched successfully. }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       productId: { type: string, format: uuid }
+ *                       addedAt: { type: string, format: date-time }
+ *                       product: { $ref: '#/components/schemas/Product' }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
  */
 router.get('/wishlist', ctrl.getWishlist);
 
@@ -194,16 +368,34 @@ router.get('/wishlist', ctrl.getWishlist);
  * /users/wishlist/{productId}:
  *   post:
  *     tags: [Users]
- *     summary: Toggle product in wishlist (add/remove)
+ *     summary: Toggle product in wishlist
+ *     description: Adds the product if not in wishlist, removes it if already present.
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: productId
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, format: uuid }
+ *         description: Product UUID to add or remove
  *     responses:
- *       200: { description: Wishlist updated }
+ *       200:
+ *         description: Wishlist updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Added to wishlist. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     action: { type: string, enum: [added, removed], example: added }
+ *                     wishlist: { type: array, items: { type: string, format: uuid } }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ *       404: { description: Product not found }
  */
 router.post('/wishlist/:productId', ctrl.toggleWishlist);
 
