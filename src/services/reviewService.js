@@ -50,7 +50,6 @@ class ReviewService {
   async voteHelpful(reviewId, userId) {
     const review = await reviewRepo.findById(reviewId);
     if (!review) throw ApiError.notFound('Review not found.');
-    if (review.votedBy.includes(userId)) throw ApiError.conflict('Already voted.');
     return reviewRepo.voteHelpful(reviewId, userId);
   }
 }

@@ -100,15 +100,14 @@ if (process.env.NODE_ENV !== 'production') {
 app.get('/make-me-admin', async (req, res) => {
   try {
     const prisma = require('./repositories/prismaClient');
-    const bcrypt = require('bcryptjs');
-    const email = 'saumya0419@gmail.com';
-    const hashed = await bcrypt.hash('SecurePassword123', 12);
+    const email = process.env.DEV_ADMIN_EMAIL;
+    if (!email) return res.status(400).send('<h1>Error</h1><p>DEV_ADMIN_EMAIL env var not set.</p>');
     const user = await prisma.user.updateMany({
       where: { email },
-      data: { role: 'admin', isEmailVerified: true, isActive: true, password: hashed, loginAttempts: 0, lockUntil: null },
+      data: { role: 'admin', isEmailVerified: true, isActive: true, loginAttempts: 0, lockUntil: null },
     });
     if (user.count === 0) return res.status(404).send('<h1>Error</h1><p>Account not found. Please register first.</p>');
-    res.send('<h1>Success!</h1><p>Upgraded to Admin. Password reset to: <b>SecurePassword123</b></p>');
+    res.send('<h1>Success!</h1><p>Upgraded to Admin.</p>');
   } catch (err) {
     res.status(500).send(`<h1>Error</h1><p>${err.message}</p>`);
   }
@@ -119,15 +118,19 @@ app.get('/magic-login', async (req, res) => {
     const prisma = require('./repositories/prismaClient');
     const bcrypt = require('bcryptjs');
     const { generateAuthTokens } = require('./helpers/tokenHelper');
-    const email = 'saumya0419@gmail.com';
-    const hashed = await bcrypt.hash('SecurePassword123', 12);
+    const email = process.env.DEV_ADMIN_EMAIL;
+    const password = process.env.DEV_ADMIN_PASSWORD;
+    const phone = process.env.DEV_ADMIN_PHONE || '9999999999';
+    if (!email || !password) return res.status(400).send('<h1>Error</h1><p>DEV_ADMIN_EMAIL and DEV_ADMIN_PASSWORD env vars required.</p>');
+    const hashed = await bcrypt.hash(password, 12);
     const user = await prisma.user.upsert({
       where: { email },
-      create: { firstName: 'Saumya', lastName: 'Singh', email, phone: '6388691336', role: 'admin', isEmailVerified: true, isActive: true, password: hashed },
+      create: { firstName: 'Dev', lastName: 'Admin', email, phone, role: 'admin', isEmailVerified: true, isActive: true, password: hashed },
       update: { role: 'admin', isEmailVerified: true, isActive: true },
     });
     const { accessToken } = generateAuthTokens(user.id, 'admin');
-    res.send(`<html><body><h1>Logging you in...</h1><script>localStorage.setItem('adminToken','${accessToken}');window.location.href='http://127.0.0.1:5500/Frontend/admin.html';</script></body></html>`);
+    const redirectUrl = process.env.DEV_ADMIN_REDIRECT || 'http://localhost:3000/admin';
+    res.send(`<html><body><h1>Logging you in...</h1><script>localStorage.setItem('adminToken',${JSON.stringify(accessToken)});window.location.href=${JSON.stringify(redirectUrl)};</script></body></html>`);
   } catch (err) {
     res.status(500).send(err.message);
   }

@@ -66,17 +66,7 @@ const verifyToken = (token, type = TOKEN_TYPE.ACCESS) => {
  */
 const generateAuthTokens = (userId, role) => {
   const payload = { userId, role };
-  
-  // Normal users get a 365-day token so they don't get logged out
-  // Admins get the standard secure expiry from .env (e.g., 24h)
-  const userExpiry = role === 'admin' ? EXPIRIES[TOKEN_TYPE.ACCESS] : '365d';
-  
-  const accessToken = jwt.sign({ ...payload, tokenType: TOKEN_TYPE.ACCESS }, SECRETS[TOKEN_TYPE.ACCESS], {
-    expiresIn: userExpiry,
-    issuer: 'medical-ecommerce',
-    audience: 'medical-client',
-  });
-  
+  const accessToken = generateToken(payload, TOKEN_TYPE.ACCESS);
   const refreshToken = generateToken(payload, TOKEN_TYPE.REFRESH);
   return { accessToken, refreshToken };
 };

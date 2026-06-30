@@ -7,6 +7,11 @@ const { createCloudinaryStorage, uploadBuffer } = require('../config/cloudinary'
 const ApiError = require('../helpers/ApiError');
 const { UPLOAD } = require('../constants');
 
+// Sanitize filename to prevent path traversal (CWE-22/23)
+function sanitizeFilename(filename) {
+  return path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
 // Check if Cloudinary is configured with real credentials
 const isCloudinaryConfigured = () => {
   const name = process.env.CLOUDINARY_CLOUD_NAME;
@@ -84,12 +89,12 @@ const makeDynamicUpload = (folder, options = {}) => {
       }
     } else {
       if (req.file && !req.file.path.startsWith('http')) {
-        req.file.path = `/uploads/${folder}/${req.file.filename}`;
+        req.file.path = `/uploads/${folder}/${sanitizeFilename(req.file.filename)}`;
       }
       if (req.files) {
         const files = Array.isArray(req.files) ? req.files : Object.values(req.files).flat();
         files.forEach(f => {
-          if (f.path && !f.path.startsWith('http')) f.path = `/uploads/${folder}/${f.filename}`;
+          if (f.path && !f.path.startsWith('http')) f.path = `/uploads/${folder}/${sanitizeFilename(f.filename)}`;
         });
       }
     }

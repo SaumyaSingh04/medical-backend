@@ -1,5 +1,6 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const userRepo = require('../repositories/userRepo');
 const { generateAuthTokens, generateToken, verifyToken } = require('../helpers/tokenHelper');
@@ -30,8 +31,8 @@ class AuthService {
       }];
     }
 
-    // Bypass email verification for local dev
-    userData.isEmailVerified = true;
+    // userData.isEmailVerified bypassed for local dev — remove this line for production
+    // userData.isEmailVerified = true;
 
     const user = await userRepo.create(userData);
 
@@ -64,8 +65,8 @@ class AuthService {
       throw ApiError.unauthorized(MESSAGES.INVALID_CREDENTIALS);
     }
 
-    // Bypass email verification check for local dev
-    // if (!user.isEmailVerified) throw ApiError.forbidden(MESSAGES.ACCOUNT_NOT_VERIFIED);
+    // Restore email verification check for production
+    if (!user.isEmailVerified) throw ApiError.forbidden(MESSAGES.ACCOUNT_NOT_VERIFIED);
 
     const { accessToken, refreshToken } = generateAuthTokens(user.id, user.role);
     await userRepo.addRefreshToken(user.id, refreshToken);
@@ -148,7 +149,8 @@ class AuthService {
 
   async resetPassword(token, newPassword) {
     const payload = verifyToken(token, TOKEN_TYPE.RESET_PASSWORD);
-    await userRepo.updateById(payload.userId, { password: newPassword });
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await userRepo.updateById(payload.userId, { password: hashed });
     await userRepo.clearAllRefreshTokens(payload.userId);
     return { message: MESSAGES.PASSWORD_RESET_SUCCESS };
   }
@@ -156,9 +158,10 @@ class AuthService {
   async sendOTP(phoneOrEmail) {
     const otp = generateOTP(parseInt(process.env.OTP_LENGTH, 10) || 6);
     const hashed = await hashOTP(otp);
-    const expiry = new Date(Date.now() + parseInt(process.env.OTP_EXPIRY_MINUTES, 10) * 60 * 1000);
+    const expiry = new Date(Date.now() + (parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 10) * 60 * 1000);
 
-    const user = await userRepo.findByEmail(phoneOrEmail);
+    const user = await userRepo.findByEmail(phoneOrEmail)
+      || await userRepo.findByPhone(phoneOrEmail);
     if (!user) throw ApiError.notFound('Account not found.');
 
     await userRepo.updateById(user.id, { otp: hashed, otpExpiry: expiry, otpAttempts: 0 });
@@ -168,7 +171,8 @@ class AuthService {
   }
 
   async verifyOTP(phoneOrEmail, otp) {
-    const user = await userRepo.findByEmail(phoneOrEmail);
+    const user = await userRepo.findByEmail(phoneOrEmail)
+      || await userRepo.findByPhone(phoneOrEmail);
     if (!user) throw ApiError.notFound('Account not found.');
 
     // user already has otp/otpExpiry from findByEmail — no separate findOne needed

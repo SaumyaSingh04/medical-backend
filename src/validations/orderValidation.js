@@ -8,7 +8,7 @@ const placeOrder = Joi.object({
     productId: Joi.string().required(),
     name: Joi.string().optional(),
     price: Joi.number().optional(),
-    variantId: Joi.string().optional(),
+    variantId: Joi.string().uuid().optional(),
     quantity: Joi.number().integer().min(1).required(),
   })).min(1).required(),
   shippingAddressId: Joi.string().required(),

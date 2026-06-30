@@ -60,22 +60,4 @@ const buildSort = (sortString, defaultSort = '-createdAt') => {
   return sortObj;
 };
 
-/**
- * Build a MongoDB field projection from a comma-separated select string
- * e.g. 'name,price,-__v' → { name: 1, price: 1, __v: 0 }
- */
-const buildProjection = (selectString) => {
-  if (!selectString) return {};
-  const projection = {};
-  selectString.split(',').forEach((field) => {
-    const trimmed = field.trim();
-    if (trimmed.startsWith('-')) {
-      projection[trimmed.slice(1)] = 0;
-    } else {
-      projection[trimmed] = 1;
-    }
-  });
-  return projection;
-};
-
-module.exports = { parsePagination, buildPaginationMeta, buildSort, buildProjection };
+module.exports = { parsePagination, buildPaginationMeta, buildSort };

@@ -19,9 +19,6 @@ class OrderService {
     let subtotal = 0;
 
     for (const item of items) {
-      if (!item.productId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.productId)) {
-        throw ApiError.badRequest(`Invalid productId: ${item.productId}`);
-      }
       const product = await productRepo.findById(item.productId);
       if (!product || !product.isActive) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
 

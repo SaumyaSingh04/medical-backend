@@ -1,5 +1,7 @@
 'use strict';
 
+const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 const prisma = require('./prismaClient');
 
 function toMongo(row) {
@@ -16,7 +18,6 @@ function toMongo(row) {
       return pub;
     },
     async comparePassword(plain) {
-      const bcrypt = require('bcryptjs');
       return bcrypt.compare(plain, this.password || '');
     },
   };
@@ -81,7 +82,6 @@ class UserRepository {
     // Normalize email to lowercase before storing
     if (out.email) out.email = out.email.toLowerCase();
     if (out.password) {
-      const bcrypt = require('bcryptjs');
       const salt = await bcrypt.genSalt(12);
       out.password = await bcrypt.hash(out.password, salt);
     }
@@ -90,7 +90,12 @@ class UserRepository {
   }
 
   async updateById(id, data) {
-    const row = await prisma.user.update({ where: { id }, data: toPrismaData(data) });
+    const out = toPrismaData(data);
+    if (out.password) {
+      const salt = await bcrypt.genSalt(12);
+      out.password = await bcrypt.hash(out.password, salt);
+    }
+    const row = await prisma.user.update({ where: { id }, data: out });
     return toMongo(row);
   }
 
@@ -165,7 +170,7 @@ class UserRepository {
       addressData = { ...addressData };
       user.addresses = user.addresses.map((a) => ({ ...a, isDefault: false }));
     }
-    const id = require('crypto').randomUUID();
+    const id = randomUUID();
     const updated = await prisma.user.update({
       where: { id: userId },
       data: { addresses: { set: [...user.addresses, { ...addressData, id }] } },

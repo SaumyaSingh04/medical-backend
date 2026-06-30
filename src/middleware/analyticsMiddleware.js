@@ -58,7 +58,16 @@ const analyticsMiddleware = (req, res, next) => {
   if (SKIP.test(req.path)) return next();
 
   res.on('finish', () => {
-    if (res.statusCode === 401 || res.statusCode === 404) return;
+    if (res.statusCode === 404) return;
+
+    // Track failed login attempts separately
+    if (res.statusCode === 401) {
+      const failAction = resolveAction(req.method, req.originalUrl);
+      if (failAction === 'login') {
+        analytics.track(() => analytics.trackActivity(req, res, 'failed_login'));
+      }
+      return;
+    }
 
     // Resolve user from request (login sets analyticsUserId before res.finish)
     const userId = req.user?.id || req.analyticsUserId || null;

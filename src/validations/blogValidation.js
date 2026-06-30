@@ -28,7 +28,7 @@ const blogQuery = Joi.object({
   q: Joi.string().optional(),
   category: Joi.string().optional(),
   tags: Joi.string().optional(),
-  author: Joi.string().hex().length(24).optional(),
+  author: Joi.string().uuid().optional(),
   isFeatured: Joi.string().valid('true', 'false').optional(),
   status: Joi.string().valid('draft', 'published', 'archived').optional(),
 });

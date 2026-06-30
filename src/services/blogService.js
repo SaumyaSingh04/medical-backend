@@ -37,8 +37,10 @@ class BlogService {
     const blog = await blogRepo.findBySlug(slug);
     if (!blog) throw ApiError.notFound(MESSAGES.BLOG_NOT_FOUND);
 
-    await blogRepo.incrementViews(blog._id).catch(() => {});
-    await cacheService.set(cacheKey, blog, CACHE_TTL.BLOG_DETAIL);
+    blogRepo.incrementViews(blog._id).catch(() => {});
+    // Cache without views so stale count isn't frozen
+    const { views: _views, ...blogToCache } = blog;
+    await cacheService.set(cacheKey, blogToCache, CACHE_TTL.BLOG_DETAIL);
     return blog;
   }
 

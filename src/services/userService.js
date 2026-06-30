@@ -6,7 +6,7 @@ const ApiError = require('../helpers/ApiError');
 
 class UserService {
   async getProfile(userId) {
-    const user = await userRepo.findById(userId, { populate: [] });
+    const user = await userRepo.findById(userId);
     if (!user) throw ApiError.notFound('User not found.');
     return user;
   }
@@ -27,7 +27,7 @@ class UserService {
       if (updateObj[key] === undefined) delete updateObj[key];
     });
 
-    const user = await userRepo.updateById(userId, updateObj, { new: true, runValidators: true });
+    const user = await userRepo.updateById(userId, updateObj);
     if (!user) throw ApiError.notFound('User not found.');
     return user.toPublicJSON ? user.toPublicJSON() : user;
   }
@@ -72,10 +72,7 @@ class UserService {
   }
 
   async getWishlist(userId) {
-    const user = await userRepo.findById(userId, {
-      populate: [{ path: 'wishlist', select: 'name slug price thumbnail averageRating stock' }],
-      select: 'wishlist',
-    });
+    const user = await userRepo.findById(userId);
     return user?.wishlist || [];
   }
 

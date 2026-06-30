@@ -145,8 +145,9 @@ class ProductRepository {
   async buildFilter(queryParams) {
     const filter = {};
 
-    // isActive: default true for public listing; skip filter if explicitly undefined
-    if (queryParams.isActive !== undefined) {
+    if (queryParams.isActive === 'all') {
+      // no filter — show all products regardless of isActive
+    } else if (queryParams.isActive !== undefined) {
       filter.isActive = queryParams.isActive !== 'false';
     } else {
       filter.isActive = true;

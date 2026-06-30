@@ -75,8 +75,9 @@ class AdminService {
     const { page, limit, skip } = parsePagination(queryParams);
     const filter = await productRepo.buildFilter({
       ...queryParams,
-      q: queryParams.search,           // admin uses 'search', buildFilter uses 'q'
-      isActive: queryParams.isActive,  // pass-through, default true
+      q: queryParams.search,
+      // If isActive not explicitly passed, skip the filter so all products are shown
+      isActive: queryParams.isActive !== undefined ? queryParams.isActive : 'all',
     });
 
     const [products, total] = await Promise.all([

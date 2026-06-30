@@ -3,8 +3,8 @@
 const Joi = require('joi');
 
 const addToCart = Joi.object({
-  productId: Joi.string().hex().length(24).required(),
-  variantId: Joi.string().hex().length(24).optional(),
+  productId: Joi.string().uuid().required(),
+  variantId: Joi.string().uuid().optional(),
   quantity: Joi.number().integer().min(1).max(100).required(),
 });
 
