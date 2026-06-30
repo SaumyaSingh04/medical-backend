@@ -52,30 +52,34 @@ function resolveAction(method, url) {
   return 'api_access';
 }
 
-// Skip analytics paths to avoid infinite loops or noise
+// Skip analytics paths to avoid infinite loops or noise — tested against originalUrl so /api/v1 prefix works
 const SKIP = /\/(analytics|health|docs|swagger|uploads)\b/;
 
-// Auth sub-paths that are noise — skipped by originalUrl so /api/v1 prefix also works
-const SKIP_AUTH = /\/auth\/(refresh-token|send-otp|verify-otp)(\?.*)?$/;
+// Auth sub-paths that are noise — tested against originalUrl so /api/v1 prefix also works
+const SKIP_AUTH = /\/auth\/(refresh-token|send-otp|verify-otp)(\?.*)?$/
 
 const analyticsMiddleware = (req, res, next) => {
   if (SKIP.test(req.originalUrl) || SKIP_AUTH.test(req.originalUrl)) return next();
 
+  const url = req.originalUrl;
+  const method = req.method;
+  const action = resolveAction(method, url);
+
   res.on('finish', () => {
     if (res.statusCode === 404) return;
 
-    // Resolve user — login/googleAuth awaits trackLogin so analyticsUserId is set
+    // req.analyticsUserId is set by login()/googleAuth() before response is sent
     const userId = req.user?.id || req.analyticsUserId || null;
-    const action = resolveAction(req.method, req.originalUrl);
 
     analytics.track(() => analytics.trackActivity(
-      { ...req, user: userId ? { id: userId } : req.user },
+      { ...req, originalUrl: url, method, user: userId ? { id: userId } : req.user },
       res,
       action
     ));
 
-    // Update session lastActivityAt — sessionId is available because trackLogin is awaited
-    const sid = req.analyticsSessionId;
+    // req.analyticsSessionId is set by login()/googleAuth() (awaited) before res.json() fires
+    // For all other routes it comes from auth middleware via req.user session lookup
+    const sid = req.analyticsSessionId || res.locals.analyticsSessionId || null;
     if (sid) {
       analytics.track(() =>
         prisma.userSession.updateMany({

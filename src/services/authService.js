@@ -96,6 +96,9 @@ class AuthService {
         userId: user.id, email, success: true, sessionToken: refreshToken,
       });
       req.analyticsSessionId = sessionId;
+      // Also store on res.locals so res.on('finish') in analyticsMiddleware can read it
+      // even if the response object is already mid-flight
+      if (sessionId && req.res) req.res.locals.analyticsSessionId = sessionId;
     }
 
     return { accessToken, refreshToken, user: user.toPublicJSON() };
@@ -277,6 +280,8 @@ class AuthService {
         userId: user.id, email, success: true, sessionToken: refreshToken,
       });
       req.analyticsSessionId = sessionId;
+      // Also store on res.locals so res.on('finish') in analyticsMiddleware can read it reliably
+      if (sessionId && req.res) req.res.locals.analyticsSessionId = sessionId;
     }
 
     return { accessToken, refreshToken, user: user.toPublicJSON(), isNewUser };
