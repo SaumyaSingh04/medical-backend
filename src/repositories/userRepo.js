@@ -14,7 +14,7 @@ function toMongo(row) {
     avatar: avatarUrl ? { url: avatarUrl, publicId: avatarPublicId ?? null } : undefined,
     toPublicJSON() {
       const { password, otp, otpExpiry, otpAttempts, refreshTokens, passwordResetToken,
-              passwordResetExpiry, loginAttempts, lockUntil, ...pub } = this;
+              passwordResetExpiry, loginAttempts, lockUntil, googleId, ...pub } = this;
       return pub;
     },
     async comparePassword(plain) {

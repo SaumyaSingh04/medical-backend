@@ -3,6 +3,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
+const prisma = require('../repositories/prismaClient');
 const userRepo = require('../repositories/userRepo');
 const { generateAuthTokens, generateToken, verifyToken } = require('../helpers/tokenHelper');
 const { generateOTP, hashOTP, compareOTP } = require('../utils/otpUtils');
@@ -65,6 +66,9 @@ class AuthService {
     if (!user.isActive) throw ApiError.forbidden(MESSAGES.ACCOUNT_INACTIVE);
     if (user.lockUntil && user.lockUntil > new Date()) throw ApiError.forbidden('Account temporarily locked. Try again later.');
 
+    // Google-only accounts have no password set
+    if (!user.password) throw ApiError.badRequest('This account uses Google sign-in. Please login with Google.');
+
     const isMatch = await user.comparePassword(password);
     
     if (!isMatch) {
@@ -84,15 +88,14 @@ class AuthService {
       await userRepo.updateById(user.id, { loginAttempts: 0, lockUntil: null });
     }
 
-    // Track successful login — attach sessionId to req for middleware
+    // Track successful login — trackLogin is awaited so sessionId is available
+    // before res.finish fires in analyticsMiddleware
     if (req) {
       req.analyticsUserId = user.id;
-      analytics.track(async () => {
-        const sessionId = await analytics.trackLogin(req, {
-          userId: user.id, email, success: true, sessionToken: refreshToken,
-        });
-        req.analyticsSessionId = sessionId;
+      const sessionId = await analytics.trackLogin(req, {
+        userId: user.id, email, success: true, sessionToken: refreshToken,
       });
+      req.analyticsSessionId = sessionId;
     }
 
     return { accessToken, refreshToken, user: user.toPublicJSON() };
@@ -114,9 +117,14 @@ class AuthService {
     }
   }
 
-  async logout(userId, refreshToken, req) {
+  async logout(userId, refreshToken) {
+    // Find the exact session tied to this refreshToken before removing it
+    const session = await prisma.userSession.findFirst({
+      where: { userId, sessionToken: refreshToken, isActive: true },
+      select: { id: true },
+    });
     await userRepo.removeRefreshToken(userId, refreshToken);
-    analytics.track(() => analytics.trackLogout(userId));
+    analytics.track(() => analytics.trackLogout(userId, session?.id || null));
   }
 
   async refreshAccessToken(refreshToken) {
@@ -158,7 +166,14 @@ class AuthService {
     const payload = verifyToken(token, TOKEN_TYPE.RESET_PASSWORD);
     const hashed = await bcrypt.hash(newPassword, 12);
     await userRepo.updateById(payload.userId, { password: hashed });
-    await userRepo.clearAllRefreshTokens(payload.userId);
+    // Clear all refresh tokens AND close all active sessions
+    await Promise.all([
+      userRepo.clearAllRefreshTokens(payload.userId),
+      prisma.userSession.updateMany({
+        where: { userId: payload.userId, isActive: true },
+        data: { isActive: false, logoutAt: new Date() },
+      }),
+    ]);
     return { message: MESSAGES.PASSWORD_RESET_SUCCESS };
   }
 
@@ -256,15 +271,12 @@ class AuthService {
 
     if (req) {
       req.analyticsUserId = user.id;
-      analytics.track(async () => {
-        if (isNewUser) {
-          await analytics.trackRegistration(req, user.id, email);
-        }
-        const sessionId = await analytics.trackLogin(req, {
-          userId: user.id, email, success: true, sessionToken: refreshToken,
-        });
-        req.analyticsSessionId = sessionId;
+      // trackRegistration fire-and-forget (non-critical), trackLogin awaited for sessionId
+      if (isNewUser) analytics.track(() => analytics.trackRegistration(req, user.id, email));
+      const sessionId = await analytics.trackLogin(req, {
+        userId: user.id, email, success: true, sessionToken: refreshToken,
       });
+      req.analyticsSessionId = sessionId;
     }
 
     return { accessToken, refreshToken, user: user.toPublicJSON(), isNewUser };
