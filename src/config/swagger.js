@@ -54,6 +54,7 @@ const options = {
       { name: 'Notifications', description: 'User notifications — read, mark as read & delete' },
       { name: 'Blogs', description: 'Blog post management — public listing & admin CRUD' },
       { name: 'Analytics', description: 'User analytics & activity tracking — Admin only' },
+      { name: 'Videos', description: 'Home page video section — public listing, admin CRUD & add-to-cart' },
     ],
   },
   apis: [

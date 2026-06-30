@@ -14,6 +14,9 @@ class CartService {
   }
 
   async addItem(userId, { productId, variantId, quantity }) {
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw ApiError.badRequest('Quantity must be a positive integer.');
+    }
     const product = await productRepo.findById(productId);
     if (!product || !product.isActive) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
 

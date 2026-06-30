@@ -52,14 +52,32 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+const videoFileFilter = (req, file, cb) => {
+  const isImage = UPLOAD.ALLOWED_MIME_TYPES.includes(file.mimetype);
+  const isVideo = UPLOAD.ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype);
+  if (isImage || isVideo) {
+    cb(null, true);
+  } else {
+    cb(ApiError.badRequest('Invalid file type. Only MP4, WebM, MOV, AVI and images are allowed.'), false);
+  }
+};
+
 // Upload a single file object (req.file or item from req.files) to Cloudinary
 const uploadFileToCloudinary = async (file, folder) => {
-  const result = await uploadBuffer(file.buffer, folder, {
-    folder: `${process.env.CLOUDINARY_FOLDER || 'medical-ecommerce'}/${folder}`,
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 1200, crop: 'limit', quality: 'auto:good' }],
-    resource_type: 'image',
-  });
+  const isVideo = UPLOAD.ALLOWED_VIDEO_MIME_TYPES.includes(file.mimetype);
+  const options = isVideo
+    ? {
+        folder: `${process.env.CLOUDINARY_FOLDER || 'medical-ecommerce'}/${folder}`,
+        resource_type: 'video',
+        allowed_formats: ['mp4', 'webm', 'mov', 'avi'],
+      }
+    : {
+        folder: `${process.env.CLOUDINARY_FOLDER || 'medical-ecommerce'}/${folder}`,
+        allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+        transformation: [{ width: 1200, crop: 'limit', quality: 'auto:good' }],
+        resource_type: 'image',
+      };
+  const result = await uploadBuffer(file.buffer, folder, options);
   file.path = result.secure_url;
   file.filename = result.public_id;
   return file;
@@ -148,6 +166,12 @@ const blogUpload = makeDynamicUpload('blogs', {
   limits: { fileSize: UPLOAD.MAX_SIZE_BYTES }
 });
 
+// Video upload: supports mp4/webm/mov + thumbnail image
+const videoUpload = makeDynamicUpload('home-videos', {
+  limits: { fileSize: UPLOAD.VIDEO_MAX_SIZE_BYTES },
+  fileFilter: videoFileFilter,
+});
+
 // Generic multer error handler
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -158,4 +182,4 @@ const handleMulterError = (err, req, res, next) => {
   next(err);
 };
 
-module.exports = { productUpload, avatarUpload, categoryUpload, reviewUpload, blogUpload, handleMulterError };
+module.exports = { productUpload, avatarUpload, categoryUpload, reviewUpload, blogUpload, videoUpload, handleMulterError };

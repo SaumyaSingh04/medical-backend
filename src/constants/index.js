@@ -125,6 +125,9 @@ const UPLOAD = {
   MAX_SIZE_BYTES: 5 * 1024 * 1024,
   ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
   MAX_PRODUCT_IMAGES: 10,
+  VIDEO_MAX_SIZE_MB: 100,
+  VIDEO_MAX_SIZE_BYTES: 100 * 1024 * 1024,
+  ALLOWED_VIDEO_MIME_TYPES: ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'],
 };
 
 // ─── Token Types ──────────────────────────────────────────────────────────────
@@ -200,6 +203,12 @@ const MESSAGES = {
   BLOG_CREATED: 'Blog created successfully.',
   BLOG_PUBLISHED: 'Blog published successfully.',
   BLOG_UNPUBLISHED: 'Blog unpublished successfully.',
+
+  // Home Videos
+  VIDEO_NOT_FOUND: 'Video not found.',
+  VIDEO_CREATED: 'Video created successfully.',
+  VIDEO_UPDATED: 'Video updated successfully.',
+  VIDEO_DELETED: 'Video deleted successfully.',
 
   // Server
   INTERNAL_ERROR: 'Internal server error.',

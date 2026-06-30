@@ -241,6 +241,7 @@ model Product {
   reviews     Review[]
   cartItems   CartItem[]
   orderItems  OrderItem[]
+  homeVideos  HomeVideo[]
 
   @@index([categoryId, isActive])
   @@index([isFeatured, isActive])
@@ -684,5 +685,31 @@ model RegistrationLog {
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([createdAt(sort: Desc)])
+}
+
+// ─── HomeVideo ────────────────────────────────────────────────────────────────
+// Home page pr "Shop Picks" jaise video section ke liye
+// productId → linked product (optional)
+// videoUrl  → Cloudinary/local video URL
+// thumbnailUrl → video cover image
+
+model HomeVideo {
+  id               String   @id @default(uuid())
+  title            String   @db.VarChar(300)
+  videoUrl         String
+  videoPublicId    String?
+  thumbnailUrl     String?
+  thumbnailPublicId String?
+  productId        String?
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([isActive, sortOrder])
   @@index([createdAt(sort: Desc)])
 }

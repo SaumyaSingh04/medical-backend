@@ -16,4 +16,10 @@ const applyCoupon = Joi.object({
   code: Joi.string().uppercase().trim().required(),
 });
 
-module.exports = { addToCart, updateCartItem, applyCoupon };
+// Video section se add-to-cart: productId video se aata hai, variantId + quantity optional
+const addToCartFromVideo = Joi.object({
+  variantId: Joi.string().uuid().optional(),
+  quantity: Joi.number().integer().min(1).max(100).default(1),
+});
+
+module.exports = { addToCart, updateCartItem, applyCoupon, addToCartFromVideo };
