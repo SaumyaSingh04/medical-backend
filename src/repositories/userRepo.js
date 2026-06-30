@@ -138,24 +138,115 @@ class UserRepository {
     await prisma.user.update({ where: { id: userId }, data: { refreshTokens: { set: [] } } });
   }
 
-  async addToWishlist(userId, productId) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { wishlist: true } });
-    if (!user) return null;
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { wishlist: { set: [...new Set([...user.wishlist, productId])] } },
+  // ─── Wishlist (Wishlist table) ─────────────────────────────────────────────
+
+  async getWishlist(userId) {
+    return prisma.wishlist.findUnique({ where: { userId } });
+  }
+
+  async getWishlistWithProducts(userId) {
+    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
+    if (!wishlist || !wishlist.items.length) return [];
+
+    const productIds = wishlist.items.map((item) => item.productId).filter(Boolean);
+    if (!productIds.length) return [];
+
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds }, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        price: true,
+        compareAtPrice: true,
+        thumbnailUrl: true,
+        thumbnailPublicId: true,
+        stock: true,
+        averageRating: true,
+        ratingCount: true,
+        brand: true,
+        isActive: true,
+        category: { select: { id: true, name: true, slug: true } },
+      },
     });
-    return toMongo(updated);
+
+    const productMap = new Map(products.map((p) => [p.id, p]));
+
+    return wishlist.items
+      .filter((item) => productMap.has(item.productId))
+      .map((item) => {
+        const p = productMap.get(item.productId);
+        return {
+          productId: item.productId,
+          addedAt: item.addedAt,
+          product: {
+            _id: p.id,
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            price: p.price,
+            compareAtPrice: p.compareAtPrice,
+            thumbnail: p.thumbnailUrl ? { url: p.thumbnailUrl, publicId: p.thumbnailPublicId ?? null } : null,
+            stock: p.stock,
+            averageRating: p.averageRating,
+            ratingCount: p.ratingCount,
+            brand: p.brand,
+            isActive: p.isActive,
+            category: p.category ? { _id: p.category.id, id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
+          },
+        };
+      });
+  }
+
+  async addToWishlist(userId, productId) {
+    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
+
+    if (!wishlist) {
+      return prisma.wishlist.create({
+        data: {
+          userId,
+          items: [{ productId, addedAt: new Date().toISOString() }],
+        },
+      });
+    }
+
+    const alreadyExists = wishlist.items.some((item) => item.productId === productId);
+    if (alreadyExists) return wishlist;
+
+    return prisma.wishlist.update({
+      where: { userId },
+      data: {
+        items: { set: [...wishlist.items, { productId, addedAt: new Date().toISOString() }] },
+      },
+    });
   }
 
   async removeFromWishlist(userId, productId) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { wishlist: true } });
-    if (!user) return null;
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { wishlist: { set: user.wishlist.filter((id) => id !== productId) } },
+    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
+    if (!wishlist) return null;
+
+    return prisma.wishlist.update({
+      where: { userId },
+      data: {
+        items: { set: wishlist.items.filter((item) => item.productId !== productId) },
+      },
     });
-    return toMongo(updated);
+  }
+
+  async clearWishlist(userId) {
+    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
+    if (!wishlist) return null;
+
+    return prisma.wishlist.update({
+      where: { userId },
+      data: { items: { set: [] } },
+    });
+  }
+
+  async isInWishlist(userId, productId) {
+    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
+    if (!wishlist) return false;
+    return wishlist.items.some((item) => item.productId === productId);
   }
 
   async updateLastLogin(userId) {

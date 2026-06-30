@@ -56,4 +56,14 @@ const toggleWishlist = asyncHandler(async (req, res) => {
   sendSuccess(res, result.wishlisted ? 'Added to wishlist.' : 'Removed from wishlist.', result);
 });
 
-module.exports = { getProfile, updateProfile, uploadAvatar, getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, getWishlist, toggleWishlist };
+const removeFromWishlist = asyncHandler(async (req, res) => {
+  await userService.removeFromWishlist(req.user.id, req.params.productId);
+  sendSuccess(res, 'Removed from wishlist.');
+});
+
+const clearWishlist = asyncHandler(async (req, res) => {
+  await userService.clearWishlist(req.user.id);
+  sendSuccess(res, 'Wishlist cleared.');
+});
+
+module.exports = { getProfile, updateProfile, uploadAvatar, getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, getWishlist, toggleWishlist, removeFromWishlist, clearWishlist };

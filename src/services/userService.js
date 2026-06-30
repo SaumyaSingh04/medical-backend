@@ -72,22 +72,32 @@ class UserService {
   }
 
   async getWishlist(userId) {
-    const user = await userRepo.findById(userId);
-    return user?.wishlist || [];
+    return userRepo.getWishlistWithProducts(userId);
   }
 
   async toggleWishlist(userId, productId) {
-    const user = await userRepo.findById(userId, { select: 'wishlist' });
-    if (!user) throw ApiError.notFound('User not found.');
+    const prisma = require('../repositories/prismaClient');
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!product) throw ApiError.notFound('Product not found.');
 
-    const isWishlisted = user.wishlist.some((id) => id.toString() === productId);
+    const isWishlisted = await userRepo.isInWishlist(userId, productId);
     if (isWishlisted) {
       await userRepo.removeFromWishlist(userId, productId);
-      return { wishlisted: false };
+      return { wishlisted: false, productId };
     } else {
       await userRepo.addToWishlist(userId, productId);
-      return { wishlisted: true };
+      return { wishlisted: true, productId };
     }
+  }
+
+  async removeFromWishlist(userId, productId) {
+    const isWishlisted = await userRepo.isInWishlist(userId, productId);
+    if (!isWishlisted) throw ApiError.notFound('Product not in wishlist.');
+    await userRepo.removeFromWishlist(userId, productId);
+  }
+
+  async clearWishlist(userId) {
+    await userRepo.clearWishlist(userId);
   }
 }
 

@@ -8,6 +8,8 @@ const { authorize } = require('../middleware/authorize');
 const { validate } = require('../middleware/validate');
 const { avatarUpload, handleMulterError } = require('../middleware/upload');
 const v = require('../validations/userValidation');
+const { cache } = require('../middleware/cache');
+const { CACHE_TTL } = require('../constants');
 
 // All user routes require authentication
 router.use(authenticate);
@@ -337,12 +339,12 @@ router.patch('/addresses/:addressId/default', ctrl.setDefaultAddress);
  *   get:
  *     tags: [Users]
  *     summary: Get wishlist
- *     description: Returns the current user's wishlist with full product details.
+ *     description: Returns the current user's wishlist with full product details including price, thumbnail, rating, and category.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Wishlist items
+ *         description: Wishlist items with product details
  *         content:
  *           application/json:
  *             schema:
@@ -355,9 +357,34 @@ router.patch('/addresses/:addressId/default', ctrl.setDefaultAddress);
  *                   items:
  *                     type: object
  *                     properties:
- *                       productId: { type: string, format: uuid }
- *                       addedAt: { type: string, format: date-time }
- *                       product: { $ref: '#/components/schemas/Product' }
+ *                       productId: { type: string, format: uuid, example: 550e8400-e29b-41d4-a716-446655440000 }
+ *                       addedAt: { type: string, format: date-time, example: '2024-06-01T10:30:00.000Z' }
+ *                       product:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           name: { type: string, example: Paracetamol 500mg }
+ *                           slug: { type: string, example: paracetamol-500mg }
+ *                           price: { type: number, example: 49.99 }
+ *                           compareAtPrice: { type: number, nullable: true, example: 69.99 }
+ *                           thumbnail:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               url: { type: string, example: 'https://res.cloudinary.com/demo/image/upload/product.jpg' }
+ *                               publicId: { type: string, example: products/sample }
+ *                           stock: { type: integer, example: 200 }
+ *                           averageRating: { type: number, example: 4.5 }
+ *                           ratingCount: { type: integer, example: 128 }
+ *                           brand: { type: string, example: Cipla }
+ *                           isActive: { type: boolean, example: true }
+ *                           category:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id: { type: string, format: uuid }
+ *                               name: { type: string, example: Medicines }
+ *                               slug: { type: string, example: medicines }
  *                 timestamp: { type: string, format: date-time }
  *       401: { description: Unauthorized }
  */
@@ -369,7 +396,7 @@ router.get('/wishlist', ctrl.getWishlist);
  *   post:
  *     tags: [Users]
  *     summary: Toggle product in wishlist
- *     description: Adds the product if not in wishlist, removes it if already present.
+ *     description: Adds the product if not in wishlist, removes it if already present. Product existence is validated.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -378,6 +405,7 @@ router.get('/wishlist', ctrl.getWishlist);
  *         required: true
  *         schema: { type: string, format: uuid }
  *         description: Product UUID to add or remove
+ *         example: 550e8400-e29b-41d4-a716-446655440000
  *     responses:
  *       200:
  *         description: Wishlist updated
@@ -391,12 +419,68 @@ router.get('/wishlist', ctrl.getWishlist);
  *                 data:
  *                   type: object
  *                   properties:
- *                     action: { type: string, enum: [added, removed], example: added }
- *                     wishlist: { type: array, items: { type: string, format: uuid } }
+ *                     wishlisted: { type: boolean, example: true }
+ *                     productId: { type: string, format: uuid, example: 550e8400-e29b-41d4-a716-446655440000 }
  *                 timestamp: { type: string, format: date-time }
  *       401: { description: Unauthorized }
  *       404: { description: Product not found }
  */
 router.post('/wishlist/:productId', ctrl.toggleWishlist);
+
+/**
+ * @swagger
+ * /users/wishlist/{productId}:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Remove a product from wishlist
+ *     description: Removes a specific product from the wishlist. Returns 404 if product is not in wishlist.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Product UUID to remove
+ *         example: 550e8400-e29b-41d4-a716-446655440000
+ *     responses:
+ *       200:
+ *         description: Product removed from wishlist
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Removed from wishlist. }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ *       404: { description: Product not in wishlist }
+ */
+router.delete('/wishlist/:productId', ctrl.removeFromWishlist);
+
+/**
+ * @swagger
+ * /users/wishlist:
+ *   delete:
+ *     tags: [Users]
+ *     summary: Clear entire wishlist
+ *     description: Removes all products from the wishlist.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Wishlist cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Wishlist cleared. }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ */
+router.delete('/wishlist', ctrl.clearWishlist);
 
 module.exports = router;
