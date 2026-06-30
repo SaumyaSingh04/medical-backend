@@ -7,6 +7,7 @@ const prisma = require('../repositories/prismaClient');
 const ACTION_MAP = [
   { method: 'POST',   pattern: /\/auth\/register$/,         action: 'register' },
   { method: 'POST',   pattern: /\/auth\/login$/,             action: 'login' },
+  { method: 'POST',   pattern: /\/auth\/google$/,            action: 'google_login' },
   { method: 'POST',   pattern: /\/auth\/logout$/,            action: 'logout' },
   { method: 'GET',    pattern: /\/auth\/verify-email/,       action: 'email_verification' },
   { method: 'POST',   pattern: /\/auth\/forgot-password$/,   action: 'forgot_password' },
@@ -51,25 +52,20 @@ function resolveAction(method, url) {
   return 'api_access';
 }
 
-// Skip analytics paths to avoid infinite loops
+// Skip analytics paths to avoid infinite loops or noise
 const SKIP = /\/(analytics|health|docs|swagger|uploads)\b/;
 
+// Auth sub-paths that are noise — no meaningful activity to log beyond what
+// authService already tracks explicitly (trackLogin / trackRegistration etc.)
+const SKIP_AUTH = /\/auth\/(refresh-token|send-otp|verify-otp)$/;
+
 const analyticsMiddleware = (req, res, next) => {
-  if (SKIP.test(req.path)) return next();
+  if (SKIP.test(req.path) || SKIP_AUTH.test(req.path)) return next();
 
   res.on('finish', () => {
     if (res.statusCode === 404) return;
 
-    // Track failed login attempts separately
-    if (res.statusCode === 401) {
-      const failAction = resolveAction(req.method, req.originalUrl);
-      if (failAction === 'login') {
-        analytics.track(() => analytics.trackActivity(req, res, 'failed_login'));
-      }
-      return;
-    }
-
-    // Resolve user from request (login sets analyticsUserId before res.finish)
+    // Resolve user from request (login/googleAuth sets analyticsUserId before res.finish)
     const userId = req.user?.id || req.analyticsUserId || null;
     const action = resolveAction(req.method, req.originalUrl);
 

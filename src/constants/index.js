@@ -163,6 +163,9 @@ const MESSAGES = {
   EMAIL_ALREADY_EXISTS: 'Email already registered.',
   ACCOUNT_NOT_VERIFIED: 'Please verify your email before logging in.',
   ACCOUNT_INACTIVE: 'Your account has been deactivated. Contact support.',
+  GOOGLE_AUTH_SUCCESS: 'Google login successful.',
+  GOOGLE_ACCOUNT_CREATED: 'Account created via Google.',
+  GOOGLE_TOKEN_INVALID: 'Invalid Google token.',
 
   // Generic CRUD
   CREATED: 'Created successfully.',

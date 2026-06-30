@@ -35,11 +35,21 @@ const v = require('../validations/authValidation');
  *         firstName: { type: string, example: Saumya }
  *         lastName: { type: string, example: Singh }
  *         email: { type: string, format: email, example: saumya@example.com }
- *         phone: { type: string, example: '9876543210' }
+ *         phone: { type: string, nullable: true, example: '9876543210' }
  *         role: { type: string, enum: [user, admin, super_admin], example: user }
  *         isEmailVerified: { type: boolean, example: false }
- *         avatarUrl: { type: string, nullable: true, example: null }
+ *         isPhoneVerified: { type: boolean, example: false }
+ *         isActive: { type: boolean, example: true }
+ *         googleId: { type: string, nullable: true, example: null, description: Present when account was linked via Google OAuth }
+ *         avatar:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             url: { type: string, example: 'https://lh3.googleusercontent.com/a/photo.jpg' }
+ *             publicId: { type: string, nullable: true, example: null }
+ *         lastLogin: { type: string, format: date-time, nullable: true }
  *         createdAt: { type: string, format: date-time }
+ *         updatedAt: { type: string, format: date-time }
  */
 
 /**
@@ -65,7 +75,7 @@ const v = require('../validations/authValidation');
  *               password: { type: string, minLength: 8, example: SecurePassword123 }
  *     responses:
  *       201:
- *         description: Registration successful
+ *         description: Registration successful — verification email sent
  *         content:
  *           application/json:
  *             schema:
@@ -77,8 +87,6 @@ const v = require('../validations/authValidation');
  *                   type: object
  *                   properties:
  *                     user: { $ref: '#/components/schemas/AuthUser' }
- *                     accessToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
- *                     refreshToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
  *                 timestamp: { type: string, format: date-time }
  *       400: { description: Validation error }
  *       409: { description: Email already registered }
@@ -105,7 +113,7 @@ router.post('/register', authLimiter, validate(v.register), ctrl.register);
  *               password: { type: string, example: SecurePassword123 }
  *     responses:
  *       200:
- *         description: Login successful
+ *         description: Login successful — refreshToken is set as httpOnly cookie
  *         content:
  *           application/json:
  *             schema:
@@ -118,9 +126,9 @@ router.post('/register', authLimiter, validate(v.register), ctrl.register);
  *                   properties:
  *                     user: { $ref: '#/components/schemas/AuthUser' }
  *                     accessToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
- *                     refreshToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
  *                 timestamp: { type: string, format: date-time }
  *       401: { description: Invalid credentials }
+ *       403: { description: Account not verified or deactivated }
  *       423: { description: Account locked due to too many failed attempts }
  */
 router.post('/login', authLimiter, validate(v.login), ctrl.login);
@@ -350,5 +358,77 @@ router.post('/send-otp', otpLimiter, validate(v.sendOTP), ctrl.sendOTP);
  *       400: { description: Invalid or expired OTP }
  */
 router.post('/verify-otp', validate(v.verifyOTP), ctrl.verifyOTP);
+
+/**
+ * @swagger
+ * /auth/google:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Google OAuth login / register
+ *     description: |
+ *       Authenticate using a Google **id_token** obtained from the Google Sign-In SDK on the frontend.
+ *
+ *       **Flow:**
+ *       1. Frontend gets `id_token` from Google Sign-In (e.g. `google.accounts.id.initialize`)
+ *       2. Send `idToken` to this endpoint
+ *       3. Backend verifies token with Google, finds or creates the user
+ *       4. Returns access token in body + refresh token as httpOnly cookie
+ *
+ *       **Behaviour:**
+ *       - New user → account auto-created, email pre-verified, returns `201` with `isNewUser: true`
+ *       - Existing user (matched by googleId or email) → logs in, returns `200`
+ *       - If existing account has no `googleId` yet → auto-linked
+ *       - Inactive account → `403`
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [idToken]
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Google id_token from Google Sign-In SDK
+ *                 example: eyJhbGciOiJSUzI1NiIsImtpZCI6Ijg...
+ *     responses:
+ *       200:
+ *         description: Existing user logged in via Google
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Google login successful. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
+ *                     isNewUser: { type: boolean, example: false }
+ *                     user: { $ref: '#/components/schemas/AuthUser' }
+ *                 timestamp: { type: string, format: date-time }
+ *       201:
+ *         description: New user account created via Google
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Account created via Google. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     accessToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
+ *                     isNewUser: { type: boolean, example: true }
+ *                     user: { $ref: '#/components/schemas/AuthUser' }
+ *                 timestamp: { type: string, format: date-time }
+ *       400: { description: idToken missing or Google verification failed }
+ *       403: { description: Account is deactivated }
+ *       500: { description: Google OAuth not configured on server }
+ */
+router.post('/google', authLimiter, ctrl.googleAuth);
 
 module.exports = router;

@@ -2,6 +2,7 @@
 
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
 const userRepo = require('../repositories/userRepo');
 const { generateAuthTokens, generateToken, verifyToken } = require('../helpers/tokenHelper');
 const { generateOTP, hashOTP, compareOTP } = require('../utils/otpUtils');
@@ -9,6 +10,12 @@ const { sendEmail } = require('../utils/mailer');
 const ApiError = require('../helpers/ApiError');
 const { MESSAGES, TOKEN_TYPE, ROLES } = require('../constants');
 const analytics = require('./analyticsService');
+
+// Lazily resolved so the client always picks up the env var at call-time
+function getGoogleClient() {
+  if (!process.env.GOOGLE_CLIENT_ID) throw ApiError.internal('Google OAuth is not configured.');
+  return new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+}
 
 class AuthService {
   async register({ firstName, lastName, email, phone, password, address, pincode, landmark, city, state }, req) {
@@ -175,7 +182,6 @@ class AuthService {
       || await userRepo.findByPhone(phoneOrEmail);
     if (!user) throw ApiError.notFound('Account not found.');
 
-    // user already has otp/otpExpiry from findByEmail — no separate findOne needed
     if (!user.otp || !user.otpExpiry || new Date() > user.otpExpiry) {
       throw ApiError.badRequest(MESSAGES.OTP_INVALID);
     }
@@ -188,6 +194,80 @@ class AuthService {
 
     await userRepo.updateById(user.id, { otp: null, otpExpiry: null, isPhoneVerified: true });
     return { message: MESSAGES.OTP_VERIFIED };
+  }
+
+  /**
+   * Google OAuth — verify Google id_token, find-or-create user, return JWT pair.
+   * Frontend sends the id_token obtained from Google Sign-In SDK.
+   */
+  async googleAuth(idToken, req) {
+    const googleClient = getGoogleClient();
+
+    // Verify the token with Google
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw ApiError.badRequest('Invalid Google token.');
+    }
+
+    const { sub: googleId, email, given_name: firstName, family_name: lastName, picture } = payload;
+
+    if (!email) throw ApiError.badRequest('Google account has no email associated.');
+
+    // Find existing user by googleId first, then fall back to email
+    let user = await userRepo.findOne({ googleId }) || await userRepo.findByEmail(email);
+
+    const isNewUser = !user;
+
+    if (isNewUser) {
+      // New user — create with avatar object so toPrismaData maps it correctly
+      user = await userRepo.create({
+        firstName: firstName || 'User',
+        lastName: lastName || '',
+        email,
+        googleId,
+        avatar: picture ? { url: picture } : null,
+        isEmailVerified: true,
+        role: ROLES.USER,
+      });
+    } else {
+      // isActive check BEFORE doing any writes
+      if (!user.isActive) throw ApiError.forbidden(MESSAGES.ACCOUNT_INACTIVE);
+
+      // Link googleId / avatar if missing
+      const updates = {};
+      if (!user.googleId) updates.googleId = googleId;
+      if (!user.avatar && picture) updates.avatar = { url: picture };
+      if (!user.isEmailVerified) updates.isEmailVerified = true;
+      if (Object.keys(updates).length) {
+        const updated = await userRepo.updateById(user.id, updates);
+        if (updated) user = updated;
+      }
+    }
+
+    const { accessToken, refreshToken } = generateAuthTokens(user.id, user.role);
+    await userRepo.addRefreshToken(user.id, refreshToken);
+    await userRepo.updateLastLogin(user.id);
+
+    if (req) {
+      req.analyticsUserId = user.id;
+      analytics.track(async () => {
+        if (isNewUser) {
+          await analytics.trackRegistration(req, user.id, email);
+        }
+        const sessionId = await analytics.trackLogin(req, {
+          userId: user.id, email, success: true, sessionToken: refreshToken,
+        });
+        req.analyticsSessionId = sessionId;
+      });
+    }
+
+    return { accessToken, refreshToken, user: user.toPublicJSON(), isNewUser };
   }
 }
 

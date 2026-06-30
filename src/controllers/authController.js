@@ -71,4 +71,25 @@ const verifyOTP = asyncHandler(async (req, res) => {
   sendSuccess(res, result.message);
 });
 
-module.exports = { register, login, logout, refreshToken, verifyEmail, forgotPassword, resetPassword, sendOTP, verifyOTP };
+const googleAuth = asyncHandler(async (req, res) => {
+  const { idToken } = req.body;
+  if (!idToken) return res.status(HTTP_STATUS.BAD_REQUEST).json({ success: false, message: 'idToken is required.' });
+
+  const { accessToken, refreshToken, user, isNewUser } = await authService.googleAuth(idToken, req);
+
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE === 'true',
+    sameSite: process.env.COOKIE_SAME_SITE || 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+
+  sendSuccess(
+    res,
+    isNewUser ? 'Account created via Google.' : 'Google login successful.',
+    { accessToken, user, isNewUser },
+    isNewUser ? HTTP_STATUS.CREATED : HTTP_STATUS.OK,
+  );
+});
+
+module.exports = { register, login, logout, refreshToken, verifyEmail, forgotPassword, resetPassword, sendOTP, verifyOTP, googleAuth };
