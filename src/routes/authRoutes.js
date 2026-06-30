@@ -30,6 +30,7 @@ const v = require('../validations/authValidation');
  *           example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *     AuthUser:
  *       type: object
+ *       description: Public user object returned in all auth responses (sensitive fields stripped)
  *       properties:
  *         id: { type: string, format: uuid, example: 550e8400-e29b-41d4-a716-446655440000 }
  *         firstName: { type: string, example: Saumya }
@@ -40,13 +41,28 @@ const v = require('../validations/authValidation');
  *         isEmailVerified: { type: boolean, example: false }
  *         isPhoneVerified: { type: boolean, example: false }
  *         isActive: { type: boolean, example: true }
- *         googleId: { type: string, nullable: true, example: null, description: Present when account was linked via Google OAuth }
  *         avatar:
  *           type: object
  *           nullable: true
+ *           description: Present for Google OAuth users or users who uploaded a photo
  *           properties:
  *             url: { type: string, example: 'https://lh3.googleusercontent.com/a/photo.jpg' }
  *             publicId: { type: string, nullable: true, example: null }
+ *         addresses:
+ *           type: array
+ *           description: Saved delivery addresses
+ *           items:
+ *             type: object
+ *             properties:
+ *               id: { type: string, format: uuid }
+ *               fullName: { type: string, example: Saumya Singh }
+ *               phone: { type: string, example: '9876543210' }
+ *               addressLine1: { type: string, example: '123 Main St' }
+ *               addressLine2: { type: string, nullable: true, example: Near Park }
+ *               city: { type: string, example: Mumbai }
+ *               state: { type: string, example: Maharashtra }
+ *               pincode: { type: string, example: '400001' }
+ *               isDefault: { type: boolean, example: true }
  *         lastLogin: { type: string, format: date-time, nullable: true }
  *         createdAt: { type: string, format: date-time }
  *         updatedAt: { type: string, format: date-time }
@@ -58,7 +74,12 @@ const v = require('../validations/authValidation');
  *   post:
  *     tags: [Auth]
  *     summary: Register a new user
- *     description: Creates a new user account and sends a verification email. Returns access & refresh tokens.
+ *     description: |
+ *       Creates a new user account and sends a verification email.
+ *       - `phone` is required (Indian 10-digit number starting with 6-9)
+ *       - Password must have at least one uppercase, one lowercase, and one digit
+ *       - Optional address fields create a default saved address on signup
+ *       - Email verification link is sent — login only works after verification
  *     security: []
  *     requestBody:
  *       required: true
@@ -66,13 +87,18 @@ const v = require('../validations/authValidation');
  *         application/json:
  *           schema:
  *             type: object
- *             required: [firstName, lastName, email, password]
+ *             required: [firstName, lastName, email, phone, password]
  *             properties:
  *               firstName: { type: string, minLength: 2, maxLength: 50, example: Saumya }
  *               lastName: { type: string, minLength: 2, maxLength: 50, example: Singh }
  *               email: { type: string, format: email, example: saumya@example.com }
- *               phone: { type: string, example: '9876543210' }
- *               password: { type: string, minLength: 8, example: SecurePassword123 }
+ *               phone: { type: string, pattern: '^[6-9]\d{9}$', example: '9876543210' }
+ *               password: { type: string, minLength: 8, maxLength: 72, example: SecurePass123 }
+ *               address: { type: string, example: '123 Main Street', description: Optional — saved as default address }
+ *               landmark: { type: string, example: Near Central Park }
+ *               city: { type: string, example: Mumbai }
+ *               state: { type: string, example: Maharashtra }
+ *               pincode: { type: string, example: '400001' }
  *     responses:
  *       201:
  *         description: Registration successful — verification email sent
@@ -88,7 +114,7 @@ const v = require('../validations/authValidation');
  *                   properties:
  *                     user: { $ref: '#/components/schemas/AuthUser' }
  *                 timestamp: { type: string, format: date-time }
- *       400: { description: Validation error }
+ *       400: { description: Validation error — invalid phone, weak password etc. }
  *       409: { description: Email already registered }
  */
 router.post('/register', authLimiter, validate(v.register), ctrl.register);
@@ -99,7 +125,12 @@ router.post('/register', authLimiter, validate(v.register), ctrl.register);
  *   post:
  *     tags: [Auth]
  *     summary: Login with email and password
- *     description: Authenticates user credentials and returns access & refresh tokens.
+ *     description: |
+ *       Authenticates user credentials and returns an access token.
+ *       - `refreshToken` is set as an **httpOnly cookie** (not in response body)
+ *       - Email must be verified before login is allowed
+ *       - Account is locked for 30 min after 5 consecutive failed attempts
+ *       - Google-only accounts (no password set) must use `POST /auth/google`
  *     security: []
  *     requestBody:
  *       required: true
@@ -110,10 +141,10 @@ router.post('/register', authLimiter, validate(v.register), ctrl.register);
  *             required: [email, password]
  *             properties:
  *               email: { type: string, format: email, example: saumya@example.com }
- *               password: { type: string, example: SecurePassword123 }
+ *               password: { type: string, example: SecurePass123 }
  *     responses:
  *       200:
- *         description: Login successful — refreshToken is set as httpOnly cookie
+ *         description: Login successful — refreshToken set as httpOnly cookie
  *         content:
  *           application/json:
  *             schema:
@@ -124,12 +155,13 @@ router.post('/register', authLimiter, validate(v.register), ctrl.register);
  *                 data:
  *                   type: object
  *                   properties:
- *                     user: { $ref: '#/components/schemas/AuthUser' }
  *                     accessToken: { type: string, example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9... }
+ *                     user: { $ref: '#/components/schemas/AuthUser' }
  *                 timestamp: { type: string, format: date-time }
- *       401: { description: Invalid credentials }
- *       403: { description: Account not verified or deactivated }
- *       423: { description: Account locked due to too many failed attempts }
+ *       400: { description: Google-only account — must use Google sign-in }
+ *       401: { description: Invalid email or password }
+ *       403: { description: Email not verified or account deactivated }
+ *       423: { description: Account locked after 5 failed attempts — retry after 30 min }
  */
 router.post('/login', authLimiter, validate(v.login), ctrl.login);
 
@@ -139,7 +171,11 @@ router.post('/login', authLimiter, validate(v.login), ctrl.login);
  *   post:
  *     tags: [Auth]
  *     summary: Logout current user
- *     description: Invalidates the refresh token and clears the session.
+ *     description: |
+ *       Invalidates the refresh token and closes the exact active session tied to it.
+ *       - Pass `refreshToken` in body if not using cookies
+ *       - The httpOnly `refreshToken` cookie is cleared automatically
+ *       - Session `isActive` is set to false and `logoutAt` is recorded
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -148,7 +184,7 @@ router.post('/login', authLimiter, validate(v.login), ctrl.login);
  *           schema:
  *             type: object
  *             properties:
- *               refreshToken: { type: string }
+ *               refreshToken: { type: string, description: Required only if not sending via cookie }
  *     responses:
  *       200:
  *         description: Logout successful
@@ -158,9 +194,9 @@ router.post('/login', authLimiter, validate(v.login), ctrl.login);
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: Logged out successfully. }
+ *                 message: { type: string, example: Logout successful. }
  *                 timestamp: { type: string, format: date-time }
- *       401: { description: Unauthorized }
+ *       401: { description: Missing or invalid access token }
  */
 router.post('/logout', authenticate, ctrl.logout);
 
@@ -267,7 +303,11 @@ router.post('/forgot-password', authLimiter, validate(v.forgotPassword), ctrl.fo
  *   post:
  *     tags: [Auth]
  *     summary: Reset password using token
- *     description: Resets user password using the token received in the password reset email.
+ *     description: |
+ *       Resets the user password using the token received in the password reset email.
+ *       - Token is valid for 10 minutes
+ *       - On success, **all refresh tokens are revoked** and **all active sessions are closed**
+ *       - User must log in again on all devices after reset
  *     security: []
  *     requestBody:
  *       required: true
@@ -277,11 +317,11 @@ router.post('/forgot-password', authLimiter, validate(v.forgotPassword), ctrl.fo
  *             type: object
  *             required: [token, password]
  *             properties:
- *               token: { type: string, description: Password reset token from email }
- *               password: { type: string, minLength: 8, example: NewSecurePass123 }
+ *               token: { type: string, description: Password reset token from email link }
+ *               password: { type: string, minLength: 8, maxLength: 72, example: NewSecurePass123, description: Must have uppercase, lowercase and a digit }
  *     responses:
  *       200:
- *         description: Password reset successful
+ *         description: Password reset successful — all sessions invalidated
  *         content:
  *           application/json:
  *             schema:
@@ -290,7 +330,7 @@ router.post('/forgot-password', authLimiter, validate(v.forgotPassword), ctrl.fo
  *                 success: { type: boolean, example: true }
  *                 message: { type: string, example: Password reset successful. }
  *                 timestamp: { type: string, format: date-time }
- *       400: { description: Invalid or expired token }
+ *       400: { description: Invalid or expired token, or weak password }
  */
 router.post('/reset-password', authLimiter, validate(v.resetPassword), ctrl.resetPassword);
 
@@ -299,8 +339,12 @@ router.post('/reset-password', authLimiter, validate(v.resetPassword), ctrl.rese
  * /auth/send-otp:
  *   post:
  *     tags: [Auth]
- *     summary: Send OTP to email
- *     description: Sends a 6-digit OTP to the provided email for verification purposes.
+ *     summary: Send OTP via email or phone
+ *     description: |
+ *       Sends a 6-digit OTP to the user's registered email.
+ *       - Pass either email address or registered phone number in `emailOrPhone`
+ *       - OTP is valid for 10 minutes
+ *       - Rate limited to 5 requests per 10 minutes
  *     security: []
  *     requestBody:
  *       required: true
@@ -308,9 +352,9 @@ router.post('/reset-password', authLimiter, validate(v.resetPassword), ctrl.rese
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email]
+ *             required: [emailOrPhone]
  *             properties:
- *               email: { type: string, format: email, example: saumya@example.com }
+ *               emailOrPhone: { type: string, example: saumya@example.com, description: Email address or registered phone number }
  *     responses:
  *       200:
  *         description: OTP sent successfully
@@ -320,9 +364,10 @@ router.post('/reset-password', authLimiter, validate(v.resetPassword), ctrl.rese
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: OTP sent to your email. }
+ *                 message: { type: string, example: OTP sent successfully. }
  *                 timestamp: { type: string, format: date-time }
- *       429: { description: Too many OTP requests }
+ *       404: { description: Account not found for given email or phone }
+ *       429: { description: Too many OTP requests — try after 10 minutes }
  */
 router.post('/send-otp', otpLimiter, validate(v.sendOTP), ctrl.sendOTP);
 
@@ -332,7 +377,11 @@ router.post('/send-otp', otpLimiter, validate(v.sendOTP), ctrl.sendOTP);
  *   post:
  *     tags: [Auth]
  *     summary: Verify OTP
- *     description: Verifies the OTP sent to the user's email. Valid for 10 minutes.
+ *     description: |
+ *       Verifies the OTP sent to the user's email or phone.
+ *       - OTP expires after 10 minutes
+ *       - Marks `isPhoneVerified: true` on success
+ *       - Each wrong attempt is counted; too many wrong attempts may lock OTP
  *     security: []
  *     requestBody:
  *       required: true
@@ -340,9 +389,9 @@ router.post('/send-otp', otpLimiter, validate(v.sendOTP), ctrl.sendOTP);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [email, otp]
+ *             required: [emailOrPhone, otp]
  *             properties:
- *               email: { type: string, format: email, example: saumya@example.com }
+ *               emailOrPhone: { type: string, example: saumya@example.com, description: Same value used when sending OTP }
  *               otp: { type: string, minLength: 6, maxLength: 6, example: '123456' }
  *     responses:
  *       200:
@@ -353,9 +402,10 @@ router.post('/send-otp', otpLimiter, validate(v.sendOTP), ctrl.sendOTP);
  *               type: object
  *               properties:
  *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: OTP verified. }
+ *                 message: { type: string, example: OTP verified successfully. }
  *                 timestamp: { type: string, format: date-time }
  *       400: { description: Invalid or expired OTP }
+ *       404: { description: Account not found }
  */
 router.post('/verify-otp', validate(v.verifyOTP), ctrl.verifyOTP);
 
