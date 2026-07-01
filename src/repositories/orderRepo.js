@@ -29,11 +29,20 @@ function toMongo(row) {
 function itemToMongo(item) {
   if (!item) return null;
   const { id, orderId, productId, variantId, variantName, variantColor, variantSize, price, compareAtPrice, totalPrice, product, ...rest } = item;
+  let productOut = productId ?? null;
+  if (product) {
+    const { thumbnailUrl, thumbnailPublicId, ...pRest } = product;
+    productOut = {
+      ...pRest,
+      _id: product.id,
+      thumbnail: thumbnailUrl ? { url: thumbnailUrl, publicId: thumbnailPublicId ?? null } : null,
+    };
+  }
   return {
     ...rest,
     _id: id,
     id,
-    product: product ? { ...product, _id: product.id } : (productId ?? null),
+    product: productOut,
     variant: variantId ?? null,
     variantDetails: (variantName || variantColor || variantSize)
       ? { name: variantName, color: variantColor, size: variantSize }

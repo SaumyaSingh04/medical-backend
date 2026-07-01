@@ -52,6 +52,13 @@ const templates = {
  * @param {object} options - { to, subject, html, template, data }
  */
 const sendEmail = async ({ to, subject, html, template, data = {} }) => {
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  if (!smtpUser || smtpUser.includes('your_') || !smtpPass || smtpPass.includes('your_')) {
+    logger.warn(`[Mailer] SMTP not configured — skipping email to ${to}`);
+    return;
+  }
+
   try {
     const transporter = createTransporter();
     let finalSubject = subject;

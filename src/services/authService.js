@@ -14,8 +14,9 @@ const analytics = require('./analyticsService');
 
 // Lazily resolved so the client always picks up the env var at call-time
 function getGoogleClient() {
-  if (!process.env.GOOGLE_CLIENT_ID) throw ApiError.internal('Google OAuth is not configured.');
-  return new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId || clientId.includes('your_')) throw ApiError.badRequest('Google OAuth is not configured.');
+  return new OAuth2Client(clientId);
 }
 
 class AuthService {

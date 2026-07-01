@@ -77,6 +77,6 @@
       "!src/config/swagger.js"
     ],
     "coverageDirectory": "coverage",
-    "setupFilesAfterFramework": []
+    "setupFilesAfterEnv": []
   }
 }

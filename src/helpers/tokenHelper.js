@@ -4,19 +4,19 @@ const jwt = require('jsonwebtoken');
 const ApiError = require('./ApiError');
 const { TOKEN_TYPE } = require('../constants');
 
-const SECRETS = {
-  [TOKEN_TYPE.ACCESS]: process.env.JWT_ACCESS_SECRET,
-  [TOKEN_TYPE.REFRESH]: process.env.JWT_REFRESH_SECRET,
+const getSecret = (type) => ({
+  [TOKEN_TYPE.ACCESS]:         process.env.JWT_ACCESS_SECRET,
+  [TOKEN_TYPE.REFRESH]:        process.env.JWT_REFRESH_SECRET,
   [TOKEN_TYPE.RESET_PASSWORD]: process.env.JWT_RESET_PASSWORD_SECRET,
-  [TOKEN_TYPE.EMAIL_VERIFY]: process.env.JWT_EMAIL_VERIFY_SECRET,
-};
+  [TOKEN_TYPE.EMAIL_VERIFY]:   process.env.JWT_EMAIL_VERIFY_SECRET,
+})[type];
 
-const EXPIRIES = {
-  [TOKEN_TYPE.ACCESS]: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
-  [TOKEN_TYPE.REFRESH]: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+const getExpiry = (type) => ({
+  [TOKEN_TYPE.ACCESS]:         process.env.JWT_ACCESS_EXPIRES_IN         || '15m',
+  [TOKEN_TYPE.REFRESH]:        process.env.JWT_REFRESH_EXPIRES_IN        || '7d',
   [TOKEN_TYPE.RESET_PASSWORD]: process.env.JWT_RESET_PASSWORD_EXPIRES_IN || '10m',
-  [TOKEN_TYPE.EMAIL_VERIFY]: process.env.JWT_EMAIL_VERIFY_EXPIRES_IN || '24h',
-};
+  [TOKEN_TYPE.EMAIL_VERIFY]:   process.env.JWT_EMAIL_VERIFY_EXPIRES_IN   || '24h',
+})[type];
 
 /**
  * Generate a JWT token
@@ -25,11 +25,11 @@ const EXPIRIES = {
  * @returns {string} signed JWT
  */
 const generateToken = (payload, type = TOKEN_TYPE.ACCESS) => {
-  const secret = SECRETS[type];
+  const secret = getSecret(type);
   if (!secret) throw ApiError.internal(`No secret configured for token type: ${type}`);
 
   return jwt.sign({ ...payload, tokenType: type }, secret, {
-    expiresIn: EXPIRIES[type],
+    expiresIn: getExpiry(type),
     issuer: 'medical-ecommerce',
     audience: 'medical-client',
   });
@@ -42,7 +42,7 @@ const generateToken = (payload, type = TOKEN_TYPE.ACCESS) => {
  * @returns {object} Decoded payload
  */
 const verifyToken = (token, type = TOKEN_TYPE.ACCESS) => {
-  const secret = SECRETS[type];
+  const secret = getSecret(type);
   if (!secret) throw ApiError.internal(`No secret configured for token type: ${type}`);
 
   try {

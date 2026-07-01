@@ -26,26 +26,32 @@ class OrderService {
       let name = product.name;
       let variantDetails = null;
 
-      if (product && item.variantId) {
-        const variant = product.variants?.id(item.variantId);
+      if (item.variantId) {
+        const variant = (product.variants || []).find(
+          (v) => v.id === item.variantId || v._id === item.variantId
+        );
         if (!variant) throw ApiError.badRequest('Variant not found.');
         price = variant.price;
-        variantDetails = { name: variant.name, color: variant.attributes?.color, size: variant.attributes?.size };
+        variantDetails = {
+          name:  variant.name  ?? null,
+          color: variant.color ?? variant.attributes?.color ?? null,
+          size:  variant.size  ?? variant.attributes?.size  ?? null,
+        };
       }
 
       const totalPrice = Number(price) * item.quantity;
       subtotal += totalPrice;
       orderItems.push({
         product: product.id,
-        variant: item.variantId,
+        variant: item.variantId ?? null,
         name,
         slug: product.slug,
-        thumbnail: product.thumbnail?.url ?? null,
+        thumbnail: product.thumbnailUrl ?? product.thumbnail?.url ?? null,
         sku: product.sku ?? null,
         variantDetails,
         quantity: item.quantity,
-        price,
-        compareAtPrice: product.compareAtPrice ?? null,
+        price: Number(price),
+        compareAtPrice: product.compareAtPrice != null ? Number(product.compareAtPrice) : null,
         totalPrice,
       });
     }
