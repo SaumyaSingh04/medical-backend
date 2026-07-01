@@ -17,6 +17,8 @@ const notificationRoutes = require('./notificationRoutes');
 const blogRoutes = require('./blogRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
 const videoRoutes = require('./videoRoutes');
+const contactRoutes = require('./contactRoutes');
+const searchRoutes = require('./searchRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
@@ -32,5 +34,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/blogs', blogRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/videos', videoRoutes);
+router.use('/contact', contactRoutes);
+router.use('/search', searchRoutes);
 
 module.exports = router;

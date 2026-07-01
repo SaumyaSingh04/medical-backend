@@ -400,4 +400,103 @@ router.get('/orders', ctrl.listOrders);
  */
 router.patch('/orders/:id/status', ctrl.updateOrderStatus);
 
+// ─── Contact Queries ──────────────────────────────────────────────────────────
+const contactCtrl = require('../controllers/contactController');
+const contactValidation = require('../validations/contactValidation');
+const { validate } = require('../middleware/validate');
+
+/**
+ * @swagger
+ * /admin/contacts:
+ *   get:
+ *     tags: [Admin]
+ *     summary: List all contact queries (Admin)
+ *     description: Returns paginated list of all contact/support queries submitted by users.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1, minimum: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, in_progress, resolved, closed] }
+ *         description: Filter by contact status
+ *     responses:
+ *       200:
+ *         description: Paginated contact queries
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Fetched successfully. }
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string, format: uuid }
+ *                       name: { type: string, example: Saumya Singh }
+ *                       email: { type: string, format: email }
+ *                       phone: { type: string, nullable: true }
+ *                       subject: { type: string }
+ *                       message: { type: string }
+ *                       status: { type: string, enum: [pending, in_progress, resolved, closed], example: pending }
+ *                       adminNote: { type: string, nullable: true }
+ *                       createdAt: { type: string, format: date-time }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden — Admin only }
+ */
+router.get('/contacts', contactCtrl.listContacts);
+
+/**
+ * @swagger
+ * /admin/contacts/{id}/status:
+ *   patch:
+ *     tags: [Admin]
+ *     summary: Update contact query status (Admin)
+ *     description: Updates the status of a contact query and optionally adds an admin note.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *         description: Contact query UUID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status: { type: string, enum: [pending, in_progress, resolved, closed], example: resolved }
+ *               adminNote: { type: string, maxLength: 1000, example: Resolved by refunding the order. }
+ *     responses:
+ *       200:
+ *         description: Contact status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Contact status updated. }
+ *                 data: { type: object }
+ *                 timestamp: { type: string, format: date-time }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden — Admin only }
+ *       404: { description: Contact query not found }
+ */
+router.patch('/contacts/:id/status', validate(contactValidation.updateStatus), contactCtrl.updateContactStatus);
+
 module.exports = router;

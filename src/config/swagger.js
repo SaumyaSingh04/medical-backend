@@ -56,6 +56,7 @@ const options = {
       { name: 'Analytics', description: 'User analytics & activity tracking — Admin only' },
       { name: 'Videos', description: 'Home page video section — public listing, admin CRUD & add-to-cart' },
       { name: 'Search', description: 'Universal search across products, categories & blogs — autocomplete suggestions included' },
+      { name: 'Contact', description: 'Contact/support query submission by users & management by admin' },
     ],
   },
   apis: [
