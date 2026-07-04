@@ -205,18 +205,19 @@ class UserRepository {
       return prisma.wishlist.create({
         data: {
           userId,
-          items: [{ productId, addedAt: new Date().toISOString() }],
+          items: [{ productId: String(productId), addedAt: new Date().toISOString() }],
         },
       });
     }
 
-    const alreadyExists = wishlist.items.some((item) => item.productId === productId);
+    const alreadyExists = wishlist.items.some((item) => String(item.productId) === String(productId));
     if (alreadyExists) return wishlist;
 
+    const existingItems = wishlist.items.map((item) => ({ productId: String(item.productId), addedAt: item.addedAt }));
     return prisma.wishlist.update({
       where: { userId },
       data: {
-        items: { set: [...wishlist.items, { productId, addedAt: new Date().toISOString() }] },
+        items: { set: [...existingItems, { productId: String(productId), addedAt: new Date().toISOString() }] },
       },
     });
   }
@@ -225,28 +226,28 @@ class UserRepository {
     const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
     if (!wishlist) return null;
 
+    const filtered = wishlist.items
+      .filter((item) => String(item.productId) !== String(productId))
+      .map((item) => ({ productId: String(item.productId), addedAt: item.addedAt }));
+
     return prisma.wishlist.update({
       where: { userId },
-      data: {
-        items: { set: wishlist.items.filter((item) => item.productId !== productId) },
-      },
+      data: { items: { set: filtered } },
     });
   }
 
   async clearWishlist(userId) {
-    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
-    if (!wishlist) return null;
-
-    return prisma.wishlist.update({
+    return prisma.wishlist.upsert({
       where: { userId },
-      data: { items: { set: [] } },
+      update: { items: { set: [] } },
+      create: { userId, items: [] },
     });
   }
 
   async isInWishlist(userId, productId) {
     const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
     if (!wishlist) return false;
-    return wishlist.items.some((item) => item.productId === productId);
+    return wishlist.items.some((item) => String(item.productId) === String(productId));
   }
 
   async updateLastLogin(userId) {
