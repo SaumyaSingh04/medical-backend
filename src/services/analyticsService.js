@@ -56,38 +56,37 @@ async function trackRegistration(req, userId, email) {
 // ─── Login tracking ───────────────────────────────────────────────────────────
 async function trackLogin(req, { userId, email, success, failReason, sessionToken }) {
   const ua = parseUA(req.headers['user-agent']);
-  const record = await prisma.loginHistory.create({
+  const ip = getIp(req);
+  const userAgent = req.headers['user-agent'];
+
+  if (success && sessionToken) {
+    // Create session and loginHistory in parallel, then link them
+    const [session, record] = await Promise.all([
+      prisma.userSession.create({
+        data: { userId, sessionToken, ipAddress: ip, userAgent, device: ua.device, browser: ua.browser, os: ua.os },
+      }),
+      prisma.loginHistory.create({
+        data: { userId, email, success, failReason: null, ipAddress: ip, userAgent, device: ua.device, browser: ua.browser, os: ua.os },
+      }),
+    ]);
+    // Link session to login history (non-critical, fire-and-forget)
+    prisma.loginHistory.update({ where: { id: record.id }, data: { sessionId: session.id } }).catch(() => {});
+    return session.id;
+  }
+
+  await prisma.loginHistory.create({
     data: {
-      userId: success ? userId : (userId || null),
+      userId: userId || null,
       email,
       success,
       failReason: failReason || null,
-      ipAddress: getIp(req),
-      userAgent: req.headers['user-agent'],
+      ipAddress: ip,
+      userAgent,
       device: ua.device,
       browser: ua.browser,
       os: ua.os,
     },
   });
-
-  if (success && sessionToken) {
-    const session = await prisma.userSession.create({
-      data: {
-        userId,
-        sessionToken,
-        ipAddress: getIp(req),
-        userAgent: req.headers['user-agent'],
-        device: ua.device,
-        browser: ua.browser,
-        os: ua.os,
-      },
-    });
-    await prisma.loginHistory.update({
-      where: { id: record.id },
-      data: { sessionId: session.id },
-    });
-    return session.id;
-  }
   return null;
 }
 

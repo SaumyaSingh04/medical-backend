@@ -22,8 +22,8 @@ const uploadAvatar = asyncHandler(async (req, res) => {
 });
 
 const getAddresses = asyncHandler(async (req, res) => {
-  const user = await userService.getProfile(req.user.id);
-  sendSuccess(res, MESSAGES.FETCHED, user.addresses);
+  const addresses = await userService.getAddresses(req.user.id);
+  sendSuccess(res, MESSAGES.FETCHED, addresses);
 });
 
 const addAddress = asyncHandler(async (req, res) => {

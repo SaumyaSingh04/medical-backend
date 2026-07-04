@@ -47,6 +47,12 @@ class UserService {
     return updated;
   }
 
+  async getAddresses(userId) {
+    const user = await userRepo.findById(userId);
+    if (!user) throw ApiError.notFound('User not found.');
+    return user.addresses || [];
+  }
+
   async addAddress(userId, addressData) {
     const updated = await userRepo.addAddress(userId, addressData);
     if (!updated) throw ApiError.notFound('User not found.');

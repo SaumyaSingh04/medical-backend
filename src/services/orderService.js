@@ -14,12 +14,24 @@ const { paymentRepo } = require('../repositories');
 
 class OrderService {
   async placeOrder(userId, { items, shippingAddressId, paymentMethod, couponCode, customerNote }) {
-    // Validate items & compute pricing
+    // Validate items & compute pricing — fetch all products in parallel (no N+1)
     const orderItems = [];
     let subtotal = 0;
 
-    for (const item of items) {
-      const product = await productRepo.findById(item.productId);
+    const [products, user] = await Promise.all([
+      Promise.all(items.map((item) => productRepo.findById(item.productId))),
+      userRepo.findById(userId),
+    ]);
+
+    if (!user) throw ApiError.notFound('User not found.');
+    const address = (user.addresses || []).find(
+      (a) => a._id?.toString() === shippingAddressId || a.id === shippingAddressId
+    );
+    if (!address) throw ApiError.badRequest('Shipping address not found.');
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const product = products[i];
       if (!product || !product.isActive) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
 
       let price = product.price;
@@ -63,14 +75,6 @@ class OrderService {
     const codConfirmationCharge = paymentMethod === PAYMENT_METHOD.COD ? COD_SETTINGS.CONFIRMATION_CHARGE : 0;
     const totalAmount = subtotal + shippingCharge + taxAmount - couponDiscount; // codConfirmationCharge is prepaid, not added to total
 
-    // Get user's shipping address
-    const user = await userRepo.findById(userId);
-    if (!user) throw ApiError.notFound('User not found.');
-    const address = (user.addresses || []).find(
-      (a) => a._id?.toString() === shippingAddressId || a.id === shippingAddressId
-    );
-    if (!address) throw ApiError.badRequest('Shipping address not found.');
-
     const order = await orderRepo.create({
       user: userId,
       items: orderItems,
@@ -87,10 +91,10 @@ class OrderService {
       customerNote,
     });
 
-    // Decrement stock
-    for (const item of items) {
-      await productRepo.decrementStock(item.productId, item.variantId, item.quantity).catch(() => {});
-    }
+    // Decrement stock in parallel
+    await Promise.all(
+      items.map((item) => productRepo.decrementStock(item.productId, item.variantId, item.quantity).catch(() => {}))
+    );
 
     // Clear cart
     await cartService.clearCart(userId);
@@ -130,10 +134,10 @@ class OrderService {
     const cancellable = [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED];
     if (!cancellable.includes(order.status)) throw ApiError.badRequest(MESSAGES.ORDER_CANCEL_FORBIDDEN);
 
-    // Re-stock
-    for (const item of order.items) {
-      await productRepo.incrementStock(item.product, item.variant, item.quantity);
-    }
+    // Re-stock in parallel
+    await Promise.all(
+      order.items.map((item) => productRepo.incrementStock(item.product, item.variant, item.quantity))
+    );
 
     const updated = await orderRepo.addStatusHistory(orderId, ORDER_STATUS.CANCELLED, reason, userId);
 

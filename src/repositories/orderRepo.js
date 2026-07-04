@@ -243,16 +243,16 @@ class OrderRepository {
   }
 
   async getDashboardStats() {
-    const orders = await prisma.order.findMany({
-      select: { status: true, totalAmount: true },
+    const rows = await prisma.order.groupBy({
+      by: ['status'],
+      _count: { id: true },
+      _sum: { totalAmount: true },
     });
-    const grouped = {};
-    for (const o of orders) {
-      if (!grouped[o.status]) grouped[o.status] = { _id: o.status, count: 0, revenue: 0 };
-      grouped[o.status].count += 1;
-      grouped[o.status].revenue += Number(o.totalAmount);
-    }
-    return Object.values(grouped);
+    return rows.map((r) => ({
+      _id: r.status,
+      count: r._count.id,
+      revenue: Number(r._sum.totalAmount || 0),
+    }));
   }
 }
 

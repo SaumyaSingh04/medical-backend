@@ -39,7 +39,11 @@ class CacheService {
     if (!client) return;
     try {
       const keys = await client.keys(pattern);
-      if (keys.length) await client.del(...keys);
+      if (!keys.length) return;
+      // Delete in batches of 100 to avoid argument limit crashes
+      for (let i = 0; i < keys.length; i += 100) {
+        await client.del(...keys.slice(i, i + 100));
+      }
     } catch (err) {
       logger.warn(`Cache invalidate pattern error [${pattern}]:`, err.message);
     }

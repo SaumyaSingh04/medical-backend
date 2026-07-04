@@ -81,13 +81,14 @@ class AuthService {
     if (!user.isEmailVerified) throw ApiError.forbidden(MESSAGES.ACCOUNT_NOT_VERIFIED);
 
     const { accessToken, refreshToken } = generateAuthTokens(user.id, user.role);
-    await userRepo.addRefreshToken(user.id, refreshToken);
-    await userRepo.updateLastLogin(user.id);
-
-    // Reset login attempts on success
-    if (user.loginAttempts > 0) {
-      await userRepo.updateById(user.id, { loginAttempts: 0, lockUntil: null });
-    }
+    // Merge addRefreshToken + reset loginAttempts + updateLastLogin into parallel calls
+    await Promise.all([
+      userRepo.addRefreshToken(user.id, refreshToken),
+      userRepo.updateById(user.id, {
+        lastLogin: new Date(),
+        ...(user.loginAttempts > 0 && { loginAttempts: 0, lockUntil: null }),
+      }),
+    ]);
 
     // Track successful login — trackLogin is awaited so sessionId is available
     // before res.finish fires in analyticsMiddleware
@@ -270,8 +271,10 @@ class AuthService {
     }
 
     const { accessToken, refreshToken } = generateAuthTokens(user.id, user.role);
-    await userRepo.addRefreshToken(user.id, refreshToken);
-    await userRepo.updateLastLogin(user.id);
+    await Promise.all([
+      userRepo.addRefreshToken(user.id, refreshToken),
+      userRepo.updateById(user.id, { lastLogin: new Date() }),
+    ]);
 
     if (req) {
       req.analyticsUserId = user.id;
