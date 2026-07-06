@@ -55,7 +55,7 @@ function toPrismaData(data) {
 // ─── Filter adapter ───────────────────────────────────────────────────────────
 // Converts the subset of Mongoose filter shapes used by productService / adminService.
 function toWhere(filter = {}) {
-  const where = {};
+  const where = { isDeleted: false };
   for (const [k, v] of Object.entries(filter)) {
     if (k === '_id' || k === 'id') { where.id = v; continue; }
     where[k] = v;
@@ -136,7 +136,10 @@ class ProductRepository {
   }
 
   async deleteById(id) {
-    const row = await prisma.product.delete({ where: { id } });
+    const row = await prisma.product.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
     return toMongo(row);
   }
 

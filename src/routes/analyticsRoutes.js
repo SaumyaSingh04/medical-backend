@@ -7,7 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { authorize } = require('../middleware/authorize');
 const { ROLES } = require('../constants');
 
-router.use(authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN));
+router.use(authenticate, authorize(ROLES.SUPER_ADMIN));
 
 /**
  * @swagger
@@ -43,7 +43,7 @@ router.use(authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN));
  *                     avgSessionDurationSeconds: { type: integer, example: 420 }
  *                 timestamp: { type: string, format: date-time }
  *       401: { description: Unauthorized }
- *       403: { description: Forbidden — Admin only }
+ *       403: { description: Forbidden — Super Admin only }
  */
 router.get('/summary',              ctrl.getSummary);
 /**
@@ -57,9 +57,9 @@ router.get('/summary',              ctrl.getSummary);
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: period
+ *         name: groupBy
  *         schema: { type: string, enum: [daily, weekly, monthly], default: daily }
- *         description: Grouping period
+ *         description: Time grouping for the login history graph
  *     responses:
  *       200:
  *         description: Login graph data
@@ -74,14 +74,14 @@ router.get('/summary',              ctrl.getSummary);
  *                   items:
  *                     type: object
  *                     properties:
- *                       period: { type: string, format: date-time }
+ *                       groupBy: { type: string, format: date-time }
  *                       total: { type: integer, example: 48 }
  *                       successful: { type: integer, example: 45 }
  *                       failed: { type: integer, example: 3 }
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden }
  */
-router.get('/graph/logins',         ctrl.getLoginGraph);          // ?period=daily|weekly|monthly
+router.get('/graph/logins',         ctrl.getLoginGraph);          // ?groupBy=daily|weekly|monthly
 
 /**
  * @swagger

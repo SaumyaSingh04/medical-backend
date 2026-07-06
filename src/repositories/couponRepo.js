@@ -14,7 +14,7 @@ function toPrismaData(data) {
 }
 
 function toWhere(filter = {}) {
-  const where = {};
+  const where = { isDeleted: false };
   for (const [k, v] of Object.entries(filter)) {
     if (k === '_id' || k === 'id') { where.id = v; continue; }
     where[k] = v;
@@ -59,13 +59,16 @@ class CouponRepository {
   }
 
   async deleteById(id) {
-    const row = await prisma.coupon.delete({ where: { id } });
+    const row = await prisma.coupon.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
     return toMongo(row);
   }
 
   async findByCode(code) {
     const row = await prisma.coupon.findFirst({
-      where: { code: code.toUpperCase(), isActive: true },
+      where: { code: code.toUpperCase(), isDeleted: false },
     });
     return toMongo(row);
   }

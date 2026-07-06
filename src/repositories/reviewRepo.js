@@ -101,15 +101,17 @@ class ReviewRepository {
   async voteHelpful(reviewId, userId) {
     const review = await prisma.review.findUnique({ where: { id: reviewId }, select: { votedBy: true, helpfulVotes: true } });
     if (!review) return null;
-    if (review.votedBy.includes(userId)) return toMongo(review);
+    const alreadyVoted = review.votedBy.includes(userId);
     const row = await prisma.review.update({
       where: { id: reviewId },
       data: {
-        helpfulVotes: { increment: 1 },
-        votedBy: { set: [...review.votedBy, userId] },
+        helpfulVotes: { increment: alreadyVoted ? -1 : 1 },
+        votedBy: { set: alreadyVoted
+          ? review.votedBy.filter((id) => id !== userId)
+          : [...review.votedBy, userId] },
       },
     });
-    return toMongo(row);
+    return { ...toMongo(row), action: alreadyVoted ? 'removed' : 'added' };
   }
 }
 

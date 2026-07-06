@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 
 let emailQueue = null;
 let invoiceQueue = null;
+let whatsappQueue = null;
 
 const initializeJobs = () => {
   const { isRedisConfigured, getRedisClient } = require('../config/redis');
@@ -38,6 +39,17 @@ const initializeJobs = () => {
     invoiceQueue.on('completed', (job) => logger.info(`Invoice job ${job.id} completed.`));
     invoiceQueue.on('failed', (job, err) => logger.error(`Invoice job ${job.id} failed:`, err.message));
 
+    whatsappQueue = new Bull('whatsapp-queue', redisConfig);
+    whatsappQueue.process(async (job) => {
+      const interaktService = require('../services/interaktService');
+      const { type, phone, args } = job.data;
+      if (typeof interaktService[type] === 'function') {
+        await interaktService[type](phone, ...args);
+      }
+    });
+    whatsappQueue.on('completed', (job) => logger.info(`WhatsApp job ${job.id} completed.`));
+    whatsappQueue.on('failed', (job, err) => logger.error(`WhatsApp job ${job.id} failed:`, err.message));
+
     logger.info('✅ Bull job queues initialized.');
   } catch (err) {
     logger.warn('Bull queue initialization failed:', err.message);
@@ -58,4 +70,26 @@ const addInvoiceJob = async (orderId, opts = {}) => {
   }
 };
 
-module.exports = { initializeJobs, addEmailJob, addInvoiceJob };
+/**
+ * Enqueue a WhatsApp send. Falls back to direct call when Redis is unavailable.
+ * @param {string} type  - interaktService function name (e.g. 'sendOrderConfirmed')
+ * @param {string} phone
+ * @param {Array}  args  - remaining positional args after phone
+ */
+const addWhatsAppJob = async (type, phone, args = [], opts = {}) => {
+  if (!phone) return;
+  if (whatsappQueue) {
+    return whatsappQueue.add({ type, phone, args }, { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, ...opts });
+  }
+  // Synchronous fallback
+  try {
+    const interaktService = require('../services/interaktService');
+    if (typeof interaktService[type] === 'function') {
+      await interaktService[type](phone, ...args);
+    }
+  } catch (err) {
+    logger.warn(`[WhatsApp fallback] ${type} failed:`, err.message);
+  }
+};
+
+module.exports = { initializeJobs, addEmailJob, addInvoiceJob, addWhatsAppJob };

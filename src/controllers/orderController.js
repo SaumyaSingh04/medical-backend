@@ -37,7 +37,7 @@ const getInvoice = asyncHandler(async (req, res) => {
 
 const confirmCodOrder = asyncHandler(async (req, res) => {
   const result = await orderService.confirmCodOrder(req.params.id, req.user.id);
-  sendSuccess(res, result.message, { codConfirmationCharge: result.codConfirmationCharge });
+  sendSuccess(res, result.message, result.order);
 });
 
 module.exports = { placeOrder, getUserOrders, getOrder, cancelOrder, requestReturn, getInvoice, confirmCodOrder };

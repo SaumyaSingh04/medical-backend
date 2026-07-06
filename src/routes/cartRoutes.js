@@ -241,4 +241,28 @@ router.delete('/', ctrl.clearCart);
  */
 router.post('/coupon', validate(v.applyCoupon), ctrl.applyCoupon);
 
+/**
+ * @swagger
+ * /cart/coupon:
+ *   delete:
+ *     tags: [Cart]
+ *     summary: Remove coupon from cart
+ *     description: Removes the currently applied coupon from the cart and recalculates the total.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Coupon removed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Coupon removed. }
+ *                 data: { $ref: '#/components/schemas/Cart' }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ */
+
 module.exports = router;

@@ -7,6 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { authorize } = require('../middleware/authorize');
 const { optionalAuth } = require('../middleware/auth');
 const { ROLES } = require('../constants');
+const { auditLog } = require('../middleware/auditLog');
 
 /**
  * @swagger
@@ -165,7 +166,7 @@ router.get('/', ctrl.listCoupons);
  *       403: { description: Forbidden — Admin only }
  *       409: { description: Coupon code already exists }
  */
-router.post('/', ctrl.createCoupon);
+router.post('/', auditLog('create', 'Coupon'), ctrl.createCoupon);
 
 /**
  * @swagger
@@ -209,7 +210,7 @@ router.post('/', ctrl.createCoupon);
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Coupon not found }
  */
-router.put('/:id', ctrl.updateCoupon);
+router.put('/:id', auditLog('update', 'Coupon'), ctrl.updateCoupon);
 
 /**
  * @swagger
@@ -239,6 +240,6 @@ router.put('/:id', ctrl.updateCoupon);
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Coupon not found }
  */
-router.delete('/:id', ctrl.deleteCoupon);
+router.delete('/:id', auditLog('delete', 'Coupon'), ctrl.deleteCoupon);
 
 module.exports = router;

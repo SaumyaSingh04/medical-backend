@@ -105,6 +105,29 @@ router.get('/unread-count', ctrl.getUnreadCount);
 
 /**
  * @swagger
+ * /notifications/read-all:
+ *   patch:
+ *     tags: [Notifications]
+ *     summary: Mark all notifications as read
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: All marked as read. }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ */
+router.patch('/read-all', ctrl.markAllRead);
+
+/**
+ * @swagger
  * /notifications/{id}/read:
  *   patch:
  *     tags: [Notifications]
@@ -136,30 +159,6 @@ router.patch('/:id/read', ctrl.markRead);
 
 /**
  * @swagger
- * /notifications/read-all:
- *   patch:
- *     tags: [Notifications]
- *     summary: Mark all notifications as read
- *     description: Marks all unread notifications of the authenticated user as read.
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: All notifications marked as read
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: All notifications marked as read. }
- *                 timestamp: { type: string, format: date-time }
- *       401: { description: Unauthorized }
- */
-router.patch('/read-all', ctrl.markAllRead);
-
-/**
- * @swagger
  * /notifications/{id}:
  *   delete:
  *     tags: [Notifications]
@@ -187,5 +186,29 @@ router.patch('/read-all', ctrl.markAllRead);
  *       404: { description: Notification not found }
  */
 router.delete('/:id', ctrl.deleteNotification);
+
+/**
+ * @swagger
+ * /notifications:
+ *   delete:
+ *     tags: [Notifications]
+ *     summary: Delete all notifications
+ *     description: Deletes all notifications for the authenticated user. Mirrors XluxTrivenB DELETE /.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: All notifications deleted. }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ */
+router.delete('/', ctrl.deleteAllNotifications);
 
 module.exports = router;

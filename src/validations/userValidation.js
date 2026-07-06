@@ -6,7 +6,7 @@ const updateProfile = Joi.object({
   firstName: Joi.string().trim().min(2).max(50).optional(),
   lastName: Joi.string().trim().min(2).max(50).optional(),
   phone: Joi.string().allow('').pattern(/^[6-9]\d{9}$/).optional(),
-  email: Joi.string().email().lowercase().optional(),
+  // email change requires a dedicated verify-new-email flow — not allowed here
   password: Joi.string().allow('').min(8).max(72).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).optional()
     .messages({ 'string.pattern.base': 'Password must have uppercase, lowercase, and a number.' }),
 });

@@ -35,7 +35,7 @@ function toOrderBy(sort) {
 }
 
 function toWhere(filter = {}) {
-  const where = {};
+  const where = { isDeleted: false };
   for (const [k, v] of Object.entries(filter)) {
     if (k === '_id' || k === 'id') { where.id = v; continue; }
     if (k === 'parent')            { where.parentId = v ?? null; continue; }
@@ -82,7 +82,10 @@ class CategoryRepository {
   }
 
   async deleteById(id) {
-    const row = await prisma.category.delete({ where: { id } });
+    const row = await prisma.category.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
     return toMongo(row);
   }
 
@@ -93,20 +96,20 @@ class CategoryRepository {
 
   async findRoots() {
     const rows = await prisma.category.findMany({
-      where: { parentId: null, isActive: true },
+      where: { parentId: null, isActive: true, isDeleted: false },
       orderBy: { sortOrder: 'asc' },
     });
     return rows.map(toMongo);
   }
 
   async findChildren(parentId) {
-    const rows = await prisma.category.findMany({ where: { parentId, isActive: true } });
+    const rows = await prisma.category.findMany({ where: { parentId, isActive: true, isDeleted: false } });
     return rows.map(toMongo);
   }
 
   async findWithDescendants(categoryId) {
     const rows = await prisma.category.findMany({
-      where: { OR: [{ id: categoryId }, { ancestors: { has: categoryId } }] },
+      where: { isDeleted: false, OR: [{ id: categoryId }, { ancestors: { has: categoryId } }] },
     });
     return rows.map(toMongo);
   }

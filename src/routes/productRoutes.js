@@ -10,6 +10,7 @@ const { cache } = require('../middleware/cache');
 const { productUpload, handleMulterError } = require('../middleware/upload');
 const { CACHE_TTL, ROLES } = require('../constants');
 const v = require('../validations/productValidation');
+const { auditLog } = require('../middleware/auditLog');
 
 /**
  * @swagger
@@ -462,7 +463,7 @@ router.get('/featured', cache(CACHE_TTL.PRODUCT_LIST), ctrl.getFeaturedProducts)
  *       401: { description: Unauthorized }
  *       404: { description: Product not found }
  */
-router.get('/id/:id', authenticate, authorize(ROLES.ADMIN), ctrl.getProductById);
+router.get('/id/:id', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), ctrl.getProductById);
 
 /**
  * @swagger
@@ -594,7 +595,7 @@ router.get('/:slug', cache(CACHE_TTL.PRODUCT_DETAIL), ctrl.getProduct);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/', authenticate, authorize(ROLES.ADMIN), productUpload.array('images', 10), handleMulterError, validate(v.createProduct), ctrl.createProduct);
+router.post('/', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), productUpload.array('images', 10), handleMulterError, validate(v.createProduct), auditLog('create', 'Product'), ctrl.createProduct);
 
 /**
  * @swagger
@@ -667,7 +668,7 @@ router.post('/', authenticate, authorize(ROLES.ADMIN), productUpload.array('imag
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.put('/:id', authenticate, authorize(ROLES.ADMIN), productUpload.array('images', 10), handleMulterError, validate(v.updateProduct), ctrl.updateProduct);
+router.put('/:id', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), productUpload.array('images', 10), handleMulterError, validate(v.updateProduct), auditLog('update', 'Product'), ctrl.updateProduct);
 
 /**
  * @swagger
@@ -717,7 +718,7 @@ router.put('/:id', authenticate, authorize(ROLES.ADMIN), productUpload.array('im
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id', authenticate, authorize(ROLES.ADMIN), ctrl.deleteProduct);
+router.delete('/:id', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), auditLog('delete', 'Product'), ctrl.deleteProduct);
 
 /**
  * @swagger
@@ -779,6 +780,6 @@ router.delete('/:id', authenticate, authorize(ROLES.ADMIN), ctrl.deleteProduct);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id/images', authenticate, authorize(ROLES.ADMIN), ctrl.deleteProductImage);
+router.delete('/:id/images', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), auditLog('delete_image', 'Product'), ctrl.deleteProductImage);
 
 module.exports = router;

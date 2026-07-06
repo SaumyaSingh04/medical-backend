@@ -177,7 +177,10 @@ class BlogRepository {
   }
 
   async deleteById(id) {
-    const row = await prisma.blog.delete({ where: { id } });
+    const row = await prisma.blog.update({
+      where: { id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
     return toMongo(row);
   }
 
@@ -187,7 +190,7 @@ class BlogRepository {
 
   async findBySlug(slug) {
     const row = await prisma.blog.findFirst({
-      where: { slug, status: 'published' },
+      where: { slug, status: 'published', isDeleted: false },
       include: {
         author: { select: { id: true, firstName: true, lastName: true, avatarUrl: true, avatarPublicId: true } },
       },
@@ -197,7 +200,7 @@ class BlogRepository {
 
   async findBySlugAdmin(slug) {
     const row = await prisma.blog.findFirst({
-      where: { slug },
+      where: { slug, isDeleted: false },
       include: {
         author: { select: { id: true, firstName: true, lastName: true, avatarUrl: true, avatarPublicId: true } },
       },
@@ -253,7 +256,7 @@ class BlogRepository {
 }
 
 function toWhere(filter = {}) {
-  const where = {};
+  const where = { isDeleted: false };
   for (const [k, v] of Object.entries(filter)) {
     if (k === '_id' || k === 'id') { where.id = v; continue; }
     if (k === 'author')            { where.authorId = v; continue; }

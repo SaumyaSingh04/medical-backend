@@ -55,8 +55,8 @@ const generateInvoicePDF = (order) => {
       const name = item.variantDetails?.name ? `${item.name} (${item.variantDetails.name})` : item.name;
       doc.text(name, 50, y, { width: 280 });
       doc.text(item.quantity.toString(), 340, y, { width: 50, align: 'right' });
-      doc.text(`₹${item.price.toFixed(2)}`, 400, y, { width: 65, align: 'right' });
-      doc.text(`₹${item.totalPrice.toFixed(2)}`, 475, y, { width: 70, align: 'right' });
+      doc.text(`₹${Number(item.price).toFixed(2)}`, 400, y, { width: 65, align: 'right' });
+      doc.text(`₹${Number(item.totalPrice).toFixed(2)}`, 475, y, { width: 70, align: 'right' });
       y += 20;
     });
 
@@ -67,18 +67,18 @@ const generateInvoicePDF = (order) => {
       ['Subtotal', order.subtotal],
       ['Shipping', order.shippingCharge],
       ['GST (18%)', order.taxAmount],
-      ...(order.couponDiscount > 0 ? [['Coupon Discount', -order.couponDiscount]] : []),
+      ...(Number(order.couponDiscount) > 0 ? [['Coupon Discount', -Number(order.couponDiscount)]] : []),
     ];
 
     totals.forEach(([label, amount]) => {
       doc.font('Helvetica').text(label + ':', 380, y, { width: 100 });
-      doc.text(`₹${amount.toFixed(2)}`, 475, y, { width: 70, align: 'right' });
+      doc.text(`₹${Number(amount).toFixed(2)}`, 475, y, { width: 70, align: 'right' });
       y += 16;
     });
 
     doc.font('Helvetica-Bold').fontSize(12);
     doc.text('TOTAL:', 380, y, { width: 100 });
-    doc.text(`₹${order.totalAmount.toFixed(2)}`, 475, y, { width: 70, align: 'right' });
+    doc.text(`₹${Number(order.totalAmount).toFixed(2)}`, 475, y, { width: 70, align: 'right' });
 
     // ── Footer ─────────────────────────────────────────────────
     doc.fontSize(9).font('Helvetica').text('Thank you for shopping with Medical E-Commerce!', 50, 720, { align: 'center' });

@@ -53,9 +53,9 @@ class NotificationRepository {
     return prisma.notification.delete({ where: { id: existing.id } });
   }
 
-  async findUserNotifications(userId, skip = 0, limit = 20) {
+  async findUserNotifications(userId, skip = 0, limit = 20, unreadOnly = false) {
     const rows = await prisma.notification.findMany({
-      where: { userId },
+      where: unreadOnly ? { userId, isRead: false } : { userId },
       orderBy: { createdAt: 'desc' },
       skip,
       take: limit,
@@ -72,6 +72,19 @@ class NotificationRepository {
 
   async unreadCount(userId) {
     return prisma.notification.count({ where: { userId, isRead: false } });
+  }
+
+  async deleteAll(userId) {
+    return prisma.notification.deleteMany({ where: { userId } });
+  }
+
+  async createMany(records) {
+    return prisma.notification.createMany({ data: records, skipDuplicates: true });
+  }
+
+  async getActiveUserIds() {
+    const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true } });
+    return users.map((u) => u.id);
   }
 }
 

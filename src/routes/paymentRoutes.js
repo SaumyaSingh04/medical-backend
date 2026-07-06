@@ -9,6 +9,31 @@ const router = express.Router();
 // const { ROLES } = require('../constants');
 
 // ─── All payment routes commented out — only COD active ────────────────────────
+// Razorpay & Stripe endpoints are disabled. Re-enable by uncommenting below.
+
+router.get('/', (req, res) => {
+  res.status(200).json({ success: true, message: 'Payment gateway disabled. Only COD is active.' });
+});
+
+/**
+ * @swagger
+ * /payments:
+ *   get:
+ *     tags: [Payments]
+ *     summary: Payment gateway status
+ *     description: Returns the current payment gateway status. Only COD is active; Razorpay & Stripe are disabled.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Payment gateway status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Payment gateway disabled. Only COD is active. }
+ */
 
 /**
  * @swagger

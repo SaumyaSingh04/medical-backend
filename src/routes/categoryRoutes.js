@@ -8,6 +8,7 @@ const { authorize } = require('../middleware/authorize');
 const { cache } = require('../middleware/cache');
 const { categoryUpload, handleMulterError } = require('../middleware/upload');
 const { CACHE_TTL, ROLES } = require('../constants');
+const { auditLog } = require('../middleware/auditLog');
 
 /**
  * @swagger
@@ -159,7 +160,7 @@ router.get('/:slug', ctrl.getCategoryBySlug);
  *       403: { description: Forbidden — Admin only }
  *       409: { description: Category with this name or slug already exists }
  */
-router.post('/', authenticate, authorize(ROLES.ADMIN), categoryUpload.single('image'), handleMulterError, ctrl.createCategory);
+router.post('/', authenticate, authorize(ROLES.ADMIN), categoryUpload.single('image'), handleMulterError, auditLog('create', 'Category'), ctrl.createCategory);
 
 /**
  * @swagger
@@ -204,7 +205,7 @@ router.post('/', authenticate, authorize(ROLES.ADMIN), categoryUpload.single('im
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Category not found }
  */
-router.put('/:id', authenticate, authorize(ROLES.ADMIN), categoryUpload.single('image'), handleMulterError, ctrl.updateCategory);
+router.put('/:id', authenticate, authorize(ROLES.ADMIN), categoryUpload.single('image'), handleMulterError, auditLog('update', 'Category'), ctrl.updateCategory);
 
 /**
  * @swagger
@@ -236,6 +237,6 @@ router.put('/:id', authenticate, authorize(ROLES.ADMIN), categoryUpload.single('
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Category not found }
  */
-router.delete('/:id', authenticate, authorize(ROLES.ADMIN), ctrl.deleteCategory);
+router.delete('/:id', authenticate, authorize(ROLES.ADMIN), auditLog('delete', 'Category'), ctrl.deleteCategory);
 
 module.exports = router;

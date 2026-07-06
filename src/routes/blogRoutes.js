@@ -10,6 +10,7 @@ const { cache } = require('../middleware/cache');
 const { blogUpload, handleMulterError } = require('../middleware/upload');
 const { CACHE_TTL, ROLES } = require('../constants');
 const v = require('../validations/blogValidation');
+const { auditLog } = require('../middleware/auditLog');
 
 // ─── Public ───────────────────────────────────────────────────────────────────
 
@@ -154,39 +155,9 @@ router.get('/featured', cache(CACHE_TTL.BLOG_LIST), ctrl.getFeaturedBlogs);
  */
 router.post('/:id/like', ctrl.likeBlog);
 
-/**
- * @swagger
- * /blogs/{slug}:
- *   get:
- *     tags: [Blogs]
- *     summary: Get a published blog by slug
- *     description: Returns full blog post detail by slug. Response is cached.
- *     security: []
- *     parameters:
- *       - in: path
- *         name: slug
- *         required: true
- *         schema: { type: string }
- *         description: Blog post URL slug
- *         example: top-10-medicines-for-fever
- *     responses:
- *       200:
- *         description: Blog post detail
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success: { type: boolean, example: true }
- *                 message: { type: string, example: Fetched successfully. }
- *                 data: { type: object }
- *                 timestamp: { type: string, format: date-time }
- *       404:
- *         description: Blog post not found
- */
-router.get('/:slug', cache(CACHE_TTL.BLOG_DETAIL), ctrl.getBlog);
-
 // ─── Admin ────────────────────────────────────────────────────────────────────
+// NOTE: These must be registered before GET /:slug to prevent 'admin' being
+// captured as the :slug param.
 
 /**
  * @swagger
@@ -261,6 +232,38 @@ router.get('/admin/:id', authenticate, authorize(ROLES.ADMIN), ctrl.getBlogAdmin
 
 /**
  * @swagger
+ * /blogs/{slug}:
+ *   get:
+ *     tags: [Blogs]
+ *     summary: Get a published blog by slug
+ *     description: Returns full blog post detail by slug. Response is cached.
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: slug
+ *         required: true
+ *         schema: { type: string }
+ *         description: Blog post URL slug
+ *         example: top-10-medicines-for-fever
+ *     responses:
+ *       200:
+ *         description: Blog post detail
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Fetched successfully. }
+ *                 data: { type: object }
+ *                 timestamp: { type: string, format: date-time }
+ *       404:
+ *         description: Blog post not found
+ */
+router.get('/:slug', cache(CACHE_TTL.BLOG_DETAIL), ctrl.getBlog);
+
+/**
+ * @swagger
  * /blogs:
  *   post:
  *     tags: [Blogs]
@@ -302,7 +305,7 @@ router.get('/admin/:id', authenticate, authorize(ROLES.ADMIN), ctrl.getBlogAdmin
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Admin only }
  */
-router.post('/', authenticate, authorize(ROLES.ADMIN), blogUpload.single('coverImage'), handleMulterError, validate(v.createBlog), ctrl.createBlog);
+router.post('/', authenticate, authorize(ROLES.ADMIN), blogUpload.single('coverImage'), handleMulterError, validate(v.createBlog), auditLog('create', 'Blog'), ctrl.createBlog);
 
 /**
  * @swagger
@@ -350,7 +353,7 @@ router.post('/', authenticate, authorize(ROLES.ADMIN), blogUpload.single('coverI
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Blog post not found }
  */
-router.put('/:id', authenticate, authorize(ROLES.ADMIN), blogUpload.single('coverImage'), handleMulterError, validate(v.updateBlog), ctrl.updateBlog);
+router.put('/:id', authenticate, authorize(ROLES.ADMIN), blogUpload.single('coverImage'), handleMulterError, validate(v.updateBlog), auditLog('update', 'Blog'), ctrl.updateBlog);
 
 /**
  * @swagger
@@ -382,7 +385,7 @@ router.put('/:id', authenticate, authorize(ROLES.ADMIN), blogUpload.single('cove
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Blog post not found }
  */
-router.delete('/:id', authenticate, authorize(ROLES.ADMIN), ctrl.deleteBlog);
+router.delete('/:id', authenticate, authorize(ROLES.ADMIN), auditLog('delete', 'Blog'), ctrl.deleteBlog);
 
 /**
  * @swagger
@@ -416,7 +419,7 @@ router.delete('/:id', authenticate, authorize(ROLES.ADMIN), ctrl.deleteBlog);
  *       404: { description: Blog post not found }
  *       409: { description: Blog post is already published }
  */
-router.patch('/:id/publish', authenticate, authorize(ROLES.ADMIN), ctrl.publishBlog);
+router.patch('/:id/publish', authenticate, authorize(ROLES.ADMIN), auditLog('publish', 'Blog'), ctrl.publishBlog);
 
 /**
  * @swagger
@@ -449,6 +452,6 @@ router.patch('/:id/publish', authenticate, authorize(ROLES.ADMIN), ctrl.publishB
  *       403: { description: Forbidden — Admin only }
  *       404: { description: Blog post not found }
  */
-router.patch('/:id/unpublish', authenticate, authorize(ROLES.ADMIN), ctrl.unpublishBlog);
+router.patch('/:id/unpublish', authenticate, authorize(ROLES.ADMIN), auditLog('unpublish', 'Blog'), ctrl.unpublishBlog);
 
 module.exports = router;

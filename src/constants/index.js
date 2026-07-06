@@ -23,6 +23,35 @@ const ROLES = {
   SUPER_ADMIN: 'super_admin',
 };
 
+// ─── CRM Lead Statuses ───────────────────────────────────────────────────────────
+const LEAD_STATUS = {
+  NEW: 'new',
+  CONTACTED: 'contacted',
+  FOLLOW_UP: 'follow_up',
+  CNP: 'cnp',
+  INTERESTED: 'interested',
+  NOT_INTERESTED: 'not_interested',
+  CONVERTED: 'converted',
+  LOST: 'lost',
+};
+
+const LEAD_SOURCE = {
+  WEBSITE: 'website',
+  WHATSAPP: 'whatsapp',
+  SOCIAL_MEDIA: 'social_media',
+  REFERRAL: 'referral',
+  MANUAL: 'manual',
+  CONTACT_FORM: 'contact_form',
+  FRANCHISE_FORM: 'franchise_form',
+  DISTRIBUTOR_FORM: 'distributor_form',
+};
+
+const FOLLOW_UP_STATUS = {
+  SCHEDULED: 'scheduled',
+  COMPLETED: 'completed',
+  MISSED: 'missed',
+};
+
 // ─── Order Statuses ───────────────────────────────────────────────────────────
 const ORDER_STATUS = {
   PENDING: 'pending',
@@ -99,6 +128,7 @@ const CACHE_TTL = {
   OTP: 600,                // 10 min
   BLOG_LIST: 300,          // 5 min
   BLOG_DETAIL: 600,        // 10 min
+  SEARCH: 30,              // 30 sec — short TTL so results stay fresh
 };
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -237,4 +267,7 @@ module.exports = {
   TOKEN_TYPE,
   ENVIRONMENTS,
   MESSAGES,
+  LEAD_STATUS,
+  LEAD_SOURCE,
+  FOLLOW_UP_STATUS,
 };

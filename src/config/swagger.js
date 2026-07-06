@@ -56,7 +56,10 @@ const options = {
       { name: 'Analytics', description: 'User analytics & activity tracking — Admin only' },
       { name: 'Videos', description: 'Home page video section — public listing, admin CRUD & add-to-cart' },
       { name: 'Search', description: 'Universal search across products, categories & blogs — autocomplete suggestions included' },
+      { name: 'Leads', description: 'Lead management — website, franchise & distributor enquiries' },
+      { name: 'Interakt', description: 'WhatsApp messaging via Interakt — webhook & manual send' },
       { name: 'Contact', description: 'Contact/support query submission by users & management by admin' },
+      { name: 'AuditLogs', description: 'Audit log entries — Super Admin only' },
     ],
   },
   apis: [

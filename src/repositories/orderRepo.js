@@ -215,9 +215,12 @@ class OrderRepository {
     const order = await prisma.order.findUnique({ where: { id: orderId }, select: { statusHistory: true } });
     if (!order) return null;
     const entry = { status, note, updatedBy, timestamp: new Date().toISOString() };
+    const timestampFields = {};
+    if (status === 'delivered') timestampFields.deliveredAt = new Date();
+    if (status === 'cancelled') timestampFields.cancelledAt = new Date();
     const row = await prisma.order.update({
       where: { id: orderId },
-      data: { status, statusHistory: [...order.statusHistory, entry] },
+      data: { status, statusHistory: [...order.statusHistory, entry], ...timestampFields },
       include: ORDER_INCLUDE,
     });
     return toMongo(row);

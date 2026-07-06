@@ -11,6 +11,9 @@ const { parsePagination, buildPaginationMeta } = require('../helpers/paginate');
 const { ORDER_STATUS, PAYMENT_METHOD, PAYMENT_STATUS, MESSAGES, NOTIFICATION_TYPE, COD_SETTINGS } = require('../constants');
 const { uploadBuffer } = require('../config/cloudinary');
 const { paymentRepo } = require('../repositories');
+const { addWhatsAppJob } = require('../jobs');
+const { emitOrderStatusUpdate } = require('../sockets/orderSocket');
+const { getIO } = require('../sockets');
 
 class OrderService {
   async placeOrder(userId, { items, shippingAddressId, paymentMethod, couponCode, customerNote }) {
@@ -107,6 +110,11 @@ class OrderService {
       data: { orderId: order.id },
     });
 
+    // WhatsApp — fire-and-forget via queue
+    if (user.phone) {
+      addWhatsAppJob('sendOrderConfirmed', user.phone, [user.firstName || 'Customer', order.orderNumber, order.totalAmount]).catch(() => {});
+    }
+
     return order;
   }
 
@@ -122,7 +130,8 @@ class OrderService {
   async getOrderById(orderId, userId, role) {
     const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (role !== 'admin' && order.user !== userId) throw ApiError.forbidden();
+    const orderUserId = order.user?.id ?? order.user;
+    if (role !== 'admin' && orderUserId !== userId) throw ApiError.forbidden();
     return order;
   }
 
@@ -134,9 +143,11 @@ class OrderService {
     const cancellable = [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED];
     if (!cancellable.includes(order.status)) throw ApiError.badRequest(MESSAGES.ORDER_CANCEL_FORBIDDEN);
 
-    // Re-stock in parallel
+    // Re-stock in parallel — guard against null productId (SetNull on product delete)
     await Promise.all(
-      order.items.map((item) => productRepo.incrementStock(item.product, item.variant, item.quantity))
+      order.items
+        .filter((item) => item.product)
+        .map((item) => productRepo.incrementStock(item.product, item.variant, item.quantity))
     );
 
     const updated = await orderRepo.addStatusHistory(orderId, ORDER_STATUS.CANCELLED, reason, userId);
@@ -165,16 +176,36 @@ class OrderService {
   }
 
   async updateOrderStatus(orderId, status, note, adminId) {
-    const order = await orderRepo.findById(orderId);
+    // Use findWithPayment so the full user object is included — avoids a second DB hit
+    const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
     const updated = await orderRepo.addStatusHistory(orderId, status, note, adminId);
 
-    await notificationService.createNotification(order.user.toString(), {
+    // order.user is the full user object when fetched via findWithPayment
+    const userId = order.user?.id ?? order.user?.toString();
+    await notificationService.createNotification(userId, {
       type: NOTIFICATION_TYPE[`ORDER_${status.toUpperCase()}`] || NOTIFICATION_TYPE.SYSTEM,
       title: `Order ${status}`,
       message: `Your order #${order.orderNumber} status: ${status}.`,
       data: { orderId: order.id },
     });
+
+    // Emit real-time status update via Socket.IO
+    try {
+      const io = getIO();
+      emitOrderStatusUpdate(io, orderId, status, { note });
+    } catch (_) { /* Socket.IO not initialized — non-fatal */ }
+
+    // WhatsApp status notifications — user data already available, no extra DB call
+    const orderUser = order.user;
+    if (orderUser?.phone) {
+      const name = orderUser.firstName || 'Customer';
+      if (status === ORDER_STATUS.SHIPPED) {
+        addWhatsAppJob('sendOrderShipped', orderUser.phone, [name, order.orderNumber, note || '']).catch(() => {});
+      } else if (status === ORDER_STATUS.DELIVERED) {
+        addWhatsAppJob('sendOrderDelivered', orderUser.phone, [name, order.orderNumber]).catch(() => {});
+      }
+    }
 
     return updated;
   }

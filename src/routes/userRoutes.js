@@ -16,6 +16,36 @@ router.use(authenticate);
 
 /**
  * @swagger
+ * /users/dashboard:
+ *   get:
+ *     tags: [Users]
+ *     summary: Get user dashboard summary
+ *     description: Returns a summary of the user's recent orders, wishlist count, and unread notifications.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User dashboard data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: true }
+ *                 message: { type: string, example: Fetched successfully. }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     recentOrders: { type: array, items: { $ref: '#/components/schemas/Order' } }
+ *                     wishlistCount: { type: integer, example: 5 }
+ *                     unreadNotifications: { type: integer, example: 3 }
+ *                 timestamp: { type: string, format: date-time }
+ *       401: { description: Unauthorized }
+ */
+router.get('/dashboard', ctrl.getDashboard);
+
+/**
+ * @swagger
  * components:
  *   schemas:
  *     Address:

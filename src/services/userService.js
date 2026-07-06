@@ -12,16 +12,18 @@ class UserService {
   }
 
   async updateProfile(userId, updateData) {
-    const { firstName, lastName, phone, email, password } = updateData;
-    const updateObj = { firstName, lastName, phone, email };
-    
+    const { firstName, lastName, phone, password } = updateData;
+    // Email change is intentionally excluded — it requires a dedicated
+    // verify-new-email flow to prevent account takeover.
+    const updateObj = { firstName, lastName, phone };
+
     // Hash password if provided
     if (password) {
       const bcrypt = require('bcryptjs');
       const salt = await bcrypt.genSalt(12);
       updateObj.password = await bcrypt.hash(password, salt);
     }
-    
+
     // Clean up undefined fields
     Object.keys(updateObj).forEach(key => {
       if (updateObj[key] === undefined) delete updateObj[key];
@@ -104,6 +106,62 @@ class UserService {
 
   async clearWishlist(userId) {
     await userRepo.clearWishlist(userId);
+  }
+
+  async getDashboard(userId) {
+    const prisma = require('../repositories/prismaClient');
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [profile, ordersByStatus, recentOrders, monthlySpend] = await Promise.all([
+      userRepo.findById(userId),
+      prisma.order.groupBy({
+        by: ['status'],
+        _count: { id: true },
+        where: { userId },
+      }),
+      prisma.order.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: {
+          id: true, orderNumber: true, status: true,
+          totalAmount: true, createdAt: true,
+          items: { select: { name: true, quantity: true, thumbnail: true }, take: 1 },
+        },
+      }),
+      prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          userId,
+          createdAt: { gte: monthStart },
+          status: { notIn: ['cancelled', 'failed'] },
+        },
+      }),
+    ]);
+
+    const totalOrders   = ordersByStatus.reduce((s, r) => s + r._count.id, 0);
+    const activeOrders  = ordersByStatus
+      .filter(r => ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery'].includes(r.status))
+      .reduce((s, r) => s + r._count.id, 0);
+    const deliveredOrders = ordersByStatus.find(r => r.status === 'delivered')?._count.id || 0;
+
+    return {
+      profile: {
+        firstName: profile?.firstName,
+        lastName:  profile?.lastName,
+        email:     profile?.email,
+        avatarUrl: profile?.avatarUrl,
+      },
+      orders: {
+        total:     totalOrders,
+        active:    activeOrders,
+        delivered: deliveredOrders,
+        byStatus:  ordersByStatus.map(r => ({ status: r.status, count: r._count.id })),
+      },
+      monthlySpend: Number(monthlySpend._sum.totalAmount || 0),
+      recentOrders,
+    };
   }
 }
 

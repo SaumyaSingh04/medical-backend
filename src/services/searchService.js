@@ -91,6 +91,45 @@ class SearchService {
 
     return { query: q.trim(), suggestions };
   }
+  /**
+   * Admin global search — users, orders, leads + existing public entities.
+   * Returns grouped results. Never call from public routes.
+   */
+  async adminGlobalSearch(q, { limit = 5 } = {}) {
+    if (!q || !q.trim()) throw ApiError.badRequest('Search query is required.');
+    const query = q.trim();
+
+    const [publicResults, adminResults] = await Promise.all([
+      this.universalSearch(query, { productLimit: limit, categoryLimit: 3, blogLimit: 3 }),
+      searchRepo.searchAdmin(query, { limit }),
+    ]);
+
+    const [coupons, videos] = await Promise.all([
+      searchRepo.searchCoupons(query, { limit }),
+      searchRepo.searchVideos(query, { limit }),
+    ]);
+
+    return {
+      query,
+      results: {
+        ...publicResults.results,
+        users:    adminResults.users,
+        orders:   adminResults.orders.map((o) => ({ ...o, totalAmount: Number(o.totalAmount) })),
+        leads:    adminResults.leads,
+        coupons,
+        videos,
+      },
+      counts: {
+        ...publicResults.counts,
+        users:    adminResults.users.length,
+        orders:   adminResults.orders.length,
+        leads:    adminResults.leads.length,
+        coupons:  coupons.length,
+        videos:   videos.length,
+        total:    publicResults.counts.total + adminResults.users.length + adminResults.orders.length + adminResults.leads.length + coupons.length + videos.length,
+      },
+    };
+  }
 }
 
 module.exports = new SearchService();

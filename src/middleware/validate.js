@@ -10,10 +10,10 @@ const { MESSAGES } = require('../constants');
  */
 const validate = (schema, source = 'body') => {
   return (req, res, next) => {
+    // Respect schema-level unknown() preference; only strip at middleware level for body
     const { error, value } = schema.validate(req[source], {
       abortEarly: false,
-      stripUnknown: true,
-      allowUnknown: false,
+      stripUnknown: source === 'body',
     });
 
     if (error) {

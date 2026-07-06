@@ -11,6 +11,7 @@ const { sendEmail } = require('../utils/mailer');
 const ApiError = require('../helpers/ApiError');
 const { MESSAGES, TOKEN_TYPE, ROLES } = require('../constants');
 const analytics = require('./analyticsService');
+const { addWhatsAppJob } = require('../jobs');
 
 // Lazily resolved so the client always picks up the env var at call-time
 function getGoogleClient() {
@@ -169,8 +170,8 @@ class AuthService {
 
   async resetPassword(token, newPassword) {
     const payload = verifyToken(token, TOKEN_TYPE.RESET_PASSWORD);
-    const hashed = await bcrypt.hash(newPassword, 12);
-    await userRepo.updateById(payload.userId, { password: hashed });
+    // Pass raw password — userRepo.updateById hashes it internally
+    await userRepo.updateById(payload.userId, { password: newPassword });
     // Clear all refresh tokens AND close all active sessions
     await Promise.all([
       userRepo.clearAllRefreshTokens(payload.userId),
@@ -194,6 +195,12 @@ class AuthService {
     await userRepo.updateById(user.id, { otp: hashed, otpExpiry: expiry, otpAttempts: 0 });
 
     await sendEmail({ to: user.email, subject: 'Your OTP — Medical E-Commerce', template: 'otp', data: { otp, name: user.firstName } });
+
+    // Also send OTP via WhatsApp if user has a phone
+    if (user.phone) {
+      addWhatsAppJob('sendOtpWhatsApp', user.phone, [otp, parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 10]).catch(() => {});
+    }
+
     return { message: MESSAGES.OTP_SENT };
   }
 
@@ -204,6 +211,13 @@ class AuthService {
 
     if (!user.otp || !user.otpExpiry || new Date() > user.otpExpiry) {
       throw ApiError.badRequest(MESSAGES.OTP_INVALID);
+    }
+
+    const MAX_OTP_ATTEMPTS = 5;
+    if ((user.otpAttempts || 0) >= MAX_OTP_ATTEMPTS) {
+      // Clear OTP so a fresh one must be requested
+      await userRepo.updateById(user.id, { otp: null, otpExpiry: null, otpAttempts: 0 });
+      throw ApiError.badRequest('Too many incorrect OTP attempts. Please request a new OTP.');
     }
 
     const isMatch = await compareOTP(otp, user.otp);

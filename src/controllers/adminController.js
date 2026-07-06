@@ -4,11 +4,53 @@ const adminService = require('../services/adminService');
 const orderService = require('../services/orderService');
 const { sendSuccess, sendPaginated } = require('../helpers/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
-const { MESSAGES } = require('../constants');
+const { MESSAGES, ROLES } = require('../constants');
 
 const getDashboard = asyncHandler(async (req, res) => {
   const stats = await adminService.getDashboardStats();
   sendSuccess(res, MESSAGES.FETCHED, stats);
+});
+
+const getRevenueAnalytics = asyncHandler(async (req, res) => {
+  const { range = 'thisMonth', from, to } = req.query;
+  const data = await adminService.getRevenueAnalytics(range, from, to);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+const getSalesAnalytics = asyncHandler(async (req, res) => {
+  const { range = 'thisMonth', from, to } = req.query;
+  const data = await adminService.getSalesAnalytics(range, from, to);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+const getCustomerAnalytics = asyncHandler(async (req, res) => {
+  const { range = 'thisMonth', from, to } = req.query;
+  const data = await adminService.getCustomerAnalytics(range, from, to);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+const getOrderAnalytics = asyncHandler(async (req, res) => {
+  const { range = 'thisMonth', from, to } = req.query;
+  const data = await adminService.getOrderAnalytics(range, from, to);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+const getTopProducts = asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+  const data = await adminService.getTopProducts(limit);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+const getLowStockAlerts = asyncHandler(async (req, res) => {
+  const threshold = parseInt(req.query.threshold, 10) || 10;
+  const data = await adminService.getLowStockAlerts(threshold);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+const getRecentActivities = asyncHandler(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+  const data = await adminService.getRecentActivities(limit);
+  sendSuccess(res, MESSAGES.FETCHED, data);
 });
 
 const getSalesReport = asyncHandler(async (req, res) => {
@@ -19,6 +61,11 @@ const getSalesReport = asyncHandler(async (req, res) => {
 
 const listUsers = asyncHandler(async (req, res) => {
   const { users, meta } = await adminService.listUsers(req.query);
+  sendPaginated(res, MESSAGES.FETCHED, users, meta);
+});
+
+const listCustomers = asyncHandler(async (req, res) => {
+  const { users, meta } = await adminService.listUsers({ ...req.query, role: ROLES.USER });
   sendPaginated(res, MESSAGES.FETCHED, users, meta);
 });
 
@@ -47,4 +94,9 @@ const updateOrderStatus = asyncHandler(async (req, res) => {
   sendSuccess(res, MESSAGES.UPDATED, order);
 });
 
-module.exports = { getDashboard, getSalesReport, listUsers, toggleUserStatus, updateUserRole, listProducts, listOrders, updateOrderStatus };
+module.exports = {
+  getDashboard, getRevenueAnalytics, getSalesAnalytics, getCustomerAnalytics,
+  getOrderAnalytics, getTopProducts, getLowStockAlerts, getRecentActivities,
+  getSalesReport, listUsers, listCustomers, toggleUserStatus, updateUserRole,
+  listProducts, listOrders, updateOrderStatus,
+};

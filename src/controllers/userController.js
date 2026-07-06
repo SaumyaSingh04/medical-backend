@@ -3,7 +3,8 @@
 const userService = require('../services/userService');
 const { sendSuccess } = require('../helpers/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
-const { MESSAGES } = require('../constants');
+const ApiError = require('../helpers/ApiError');
+const { MESSAGES, HTTP_STATUS } = require('../constants');
 
 const getProfile = asyncHandler(async (req, res) => {
   const user = await userService.getProfile(req.user.id);
@@ -16,7 +17,7 @@ const updateProfile = asyncHandler(async (req, res) => {
 });
 
 const uploadAvatar = asyncHandler(async (req, res) => {
-  if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
+  if (!req.file) throw ApiError.badRequest('No file uploaded.');
   const user = await userService.uploadAvatar(req.user.id, req.file);
   sendSuccess(res, 'Avatar updated.', { avatar: user.avatar });
 });
@@ -28,7 +29,7 @@ const getAddresses = asyncHandler(async (req, res) => {
 
 const addAddress = asyncHandler(async (req, res) => {
   const addresses = await userService.addAddress(req.user.id, req.body);
-  sendSuccess(res, 'Address added.', addresses, 201);
+  sendSuccess(res, 'Address added.', addresses, HTTP_STATUS.CREATED);
 });
 
 const updateAddress = asyncHandler(async (req, res) => {
@@ -37,13 +38,13 @@ const updateAddress = asyncHandler(async (req, res) => {
 });
 
 const deleteAddress = asyncHandler(async (req, res) => {
-  const addresses = await userService.deleteAddress(req.user.id, req.params.addressId);
-  sendSuccess(res, 'Address deleted.', addresses);
+  await userService.deleteAddress(req.user.id, req.params.addressId);
+  sendSuccess(res, 'Address deleted.');
 });
 
 const setDefaultAddress = asyncHandler(async (req, res) => {
-  await userService.setDefaultAddress(req.user.id, req.params.addressId);
-  sendSuccess(res, 'Default address set.');
+  const addresses = await userService.setDefaultAddress(req.user.id, req.params.addressId);
+  sendSuccess(res, 'Default address set.', addresses);
 });
 
 const getWishlist = asyncHandler(async (req, res) => {
@@ -66,4 +67,9 @@ const clearWishlist = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Wishlist cleared.');
 });
 
-module.exports = { getProfile, updateProfile, uploadAvatar, getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, getWishlist, toggleWishlist, removeFromWishlist, clearWishlist };
+const getDashboard = asyncHandler(async (req, res) => {
+  const data = await userService.getDashboard(req.user.id);
+  sendSuccess(res, MESSAGES.FETCHED, data);
+});
+
+module.exports = { getProfile, updateProfile, uploadAvatar, getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, getWishlist, toggleWishlist, removeFromWishlist, clearWishlist, getDashboard };

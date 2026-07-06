@@ -11,8 +11,8 @@ const getNotifications = asyncHandler(async (req, res) => {
 });
 
 const markRead = asyncHandler(async (req, res) => {
-  await notificationService.markAsRead(req.user.id, req.params.id);
-  sendSuccess(res, 'Notification marked as read.');
+  const notification = await notificationService.markAsRead(req.user.id, req.params.id);
+  sendSuccess(res, 'Notification marked as read.', notification);
 });
 
 const markAllRead = asyncHandler(async (req, res) => {
@@ -30,4 +30,16 @@ const deleteNotification = asyncHandler(async (req, res) => {
   sendSuccess(res, MESSAGES.DELETED);
 });
 
-module.exports = { getNotifications, markRead, markAllRead, getUnreadCount, deleteNotification };
+const deleteAllNotifications = asyncHandler(async (req, res) => {
+  await notificationService.deleteAllNotifications(req.user.id);
+  sendSuccess(res, 'All notifications deleted.');
+});
+
+// Admin-only: broadcast a notification to all users or a specific user
+const broadcastNotification = asyncHandler(async (req, res) => {
+  const { title, message, type, data, actionUrl, targetUserId } = req.body;
+  const result = await notificationService.broadcastNotification({ title, message, type, data, actionUrl, targetUserId });
+  sendSuccess(res, `Notification sent to ${result.sent} user(s).`, result);
+});
+
+module.exports = { getNotifications, markRead, markAllRead, getUnreadCount, deleteNotification, deleteAllNotifications, broadcastNotification };

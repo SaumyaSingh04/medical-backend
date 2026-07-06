@@ -10,6 +10,8 @@ const paymentRepo     = require('./paymentRepo');
 const reviewRepo      = require('./reviewRepo');
 const couponRepo      = require('./couponRepo');
 const notificationRepo = require('./notificationRepo');
+const leadRepo         = require('./leadRepo');
+const auditLogRepo     = require('./auditLogRepo');
 
 module.exports = {
   categoryRepo,
@@ -22,4 +24,6 @@ module.exports = {
   reviewRepo,
   couponRepo,
   notificationRepo,
+  leadRepo,
+  auditLogRepo,
 };

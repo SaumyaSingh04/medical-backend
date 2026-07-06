@@ -133,80 +133,9 @@ const { addToCartFromVideo } = require('../validations/cartValidation');
  */
 router.get('/', videoController.getActiveVideos);
 
-// ─── Authenticated User Routes ────────────────────────────────────────────────
-
-/**
- * @swagger
- * /videos/{videoId}/add-to-cart:
- *   post:
- *     tags: [Videos]
- *     summary: Add video's linked product to cart
- *     description: |
- *       Home page video section se directly product ko cart mein add karo.
- *       Video ke saath linked productId automatically use hota hai — frontend ko productId bhejne ki zaroorat nahi.
- *       Agar video mein product linked nahi hai toh 400 error milega.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: videoId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: HomeVideo UUID
- *         example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               variantId:
- *                 type: string
- *                 format: uuid
- *                 description: Optional — agar product ka specific variant add karna ho
- *                 example: null
- *               quantity:
- *                 type: integer
- *                 minimum: 1
- *                 maximum: 100
- *                 default: 1
- *                 example: 1
- *     responses:
- *       200:
- *         description: Item added — returns updated cart
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Item added to cart.
- *                 data:
- *                   $ref: '#/components/schemas/Cart'
- *                 timestamp:
- *                   type: string
- *                   format: date-time
- *       400:
- *         description: Video has no linked product / insufficient stock / invalid quantity
- *       401:
- *         description: Unauthorized — token missing or invalid
- *       404:
- *         description: Video not found / Product not found
- */
-router.post(
-  '/:videoId/add-to-cart',
-  authenticate,
-  validate(addToCartFromVideo),
-  videoController.addVideoProductToCart
-);
-
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
+// NOTE: These must be registered before POST /:videoId/add-to-cart to prevent
+// 'admin' and 'reorder' being captured as the :videoId param.
 
 /**
  * @swagger
@@ -357,6 +286,79 @@ router.get('/admin/:id', authenticate, authorize('admin', 'super_admin'), videoC
  *         description: Forbidden
  */
 router.patch('/reorder', authenticate, authorize('admin', 'super_admin'), videoController.reorderVideos);
+
+// ─── Authenticated User Routes ────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /videos/{videoId}/add-to-cart:
+ *   post:
+ *     tags: [Videos]
+ *     summary: Add video's linked product to cart
+ *     description: |
+ *       Home page video section se directly product ko cart mein add karo.
+ *       Video ke saath linked productId automatically use hota hai — frontend ko productId bhejne ki zaroorat nahi.
+ *       Agar video mein product linked nahi hai toh 400 error milega.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: videoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: HomeVideo UUID
+ *         example: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               variantId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional — agar product ka specific variant add karna ho
+ *                 example: null
+ *               quantity:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 100
+ *                 default: 1
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Item added — returns updated cart
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Item added to cart.
+ *                 data:
+ *                   $ref: '#/components/schemas/Cart'
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Video has no linked product / insufficient stock / invalid quantity
+ *       401:
+ *         description: Unauthorized — token missing or invalid
+ *       404:
+ *         description: Video not found / Product not found
+ */
+router.post(
+  '/:videoId/add-to-cart',
+  authenticate,
+  validate(addToCartFromVideo),
+  videoController.addVideoProductToCart
+);
 
 /**
  * @swagger

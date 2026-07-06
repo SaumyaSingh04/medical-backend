@@ -1,6 +1,30 @@
 'use strict';
 
 require('dotenv').config();
+
+// ─── Fail-fast: refuse to start in production with placeholder secrets ──────────────────
+if (process.env.NODE_ENV === 'production') {
+  const REQUIRED_SECRETS = [
+    'JWT_ACCESS_SECRET',
+    'JWT_REFRESH_SECRET',
+    'JWT_RESET_PASSWORD_SECRET',
+    'JWT_EMAIL_VERIFY_SECRET',
+    'COOKIE_SECRET',
+    'DATABASE_URL',
+  ];
+  const PLACEHOLDER = 'CHANGE_ME';
+  const missing = REQUIRED_SECRETS.filter(
+    (k) => !process.env[k] || process.env[k].includes(PLACEHOLDER)
+  );
+  if (missing.length) {
+    console.error(`[FATAL] Missing or placeholder secrets in production: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+  if (process.env.ENABLE_DEV_ROUTES === 'true') {
+    console.error('[FATAL] ENABLE_DEV_ROUTES must not be true in production.');
+    process.exit(1);
+  }
+}
 const http = require('http');
 const app = require('./src/app');
 const { connectDB } = require('./src/config/database');

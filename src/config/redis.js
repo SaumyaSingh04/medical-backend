@@ -34,7 +34,7 @@ const connectRedis = async () => {
     });
 
     redisClient.on('ready', () => { connected = true; logger.info('✅ Redis connected.'); });
-    redisClient.on('error', () => {});
+    redisClient.on('error', (err) => { logger.warn(`Redis error: ${err.message}`); });
 
     await redisClient.connect();
   } catch (err) {

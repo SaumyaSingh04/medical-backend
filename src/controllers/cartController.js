@@ -32,7 +32,7 @@ const clearCart = asyncHandler(async (req, res) => {
 
 const applyCoupon = asyncHandler(async (req, res) => {
   const result = await cartService.applyCoupon(req.user.id, req.body.code);
-  sendSuccess(res, `Coupon applied. Discount: ₹${result.discount}`, result.cart);
+  sendSuccess(res, 'Coupon applied.', { cart: result.cart, discountAmount: result.discount });
 });
 
 module.exports = { getCart, addItem, updateItem, removeItem, clearCart, applyCoupon };

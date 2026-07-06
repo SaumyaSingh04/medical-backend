@@ -62,7 +62,7 @@ const unpublishBlog = asyncHandler(async (req, res) => {
 
 const likeBlog = asyncHandler(async (req, res) => {
   const blog = await blogService.likeBlog(req.params.id);
-  sendSuccess(res, MESSAGES.FETCHED, blog);
+  sendSuccess(res, 'Liked.', blog);
 });
 
 module.exports = {

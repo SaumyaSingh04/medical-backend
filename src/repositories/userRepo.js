@@ -319,6 +319,20 @@ class UserRepository {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async countSearch(search, filter = {}) {
+    const where = toWhere(filter);
+    return prisma.user.count({
+      where: {
+        ...where,
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      },
+    });
+  }
 }
 
 module.exports = new UserRepository();
