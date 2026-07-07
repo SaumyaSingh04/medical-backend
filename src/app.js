@@ -41,8 +41,8 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'", 'cdn.jsdelivr.net'],
       styleSrc:    ["'self'", "'unsafe-inline'", 'cdn.jsdelivr.net', 'fonts.googleapis.com'],
       imgSrc:      ["'self'", 'data:', 'res.cloudinary.com'],
-      fontSrc:     ["'self'", 'fonts.gstatic.com'],
-      connectSrc:  ["'self'"],
+      fontSrc:     ["'self'", 'fonts.gstatic.com', 'fonts.googleapis.com'],
+      connectSrc:  ["'self'", 'cdn.jsdelivr.net'],
       frameSrc:    ["'none'"],
       objectSrc:   ["'none'"],
       // omit upgradeInsecureRequests in non-production (passing null is invalid)
@@ -189,8 +189,6 @@ app.get('/api/v1/docs/swagger.json', (req, res) => {
 });
 
 app.get('/api/v1/docs', (req, res) => {
-  // CWE-94 fix: build specUrl from a known-safe base rather than reflecting
-  // req.protocol + req.get('host') directly into a <script> block.
   const apiPrefix = process.env.API_PREFIX || '/api/v1';
   const specUrl   = `${apiPrefix}/docs/swagger.json`;
 
@@ -199,16 +197,163 @@ app.get('/api/v1/docs', (req, res) => {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Medical E-Commerce API Docs</title>
+  <title>Medical E-Commerce — API Docs</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
-        integrity="sha256-bsV4cMSFMFMFMFMFMFMFMFMFMFMFMFMFMFMFMFMFMF=" crossorigin="anonymous" />
-  <style>body { margin: 0; } .swagger-ui .topbar { display: none; }</style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css" crossorigin="anonymous" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: #f0f4f8;
+    }
+
+    /* ── Top Banner ── */
+    .api-banner {
+      background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+      color: #fff;
+      padding: 28px 40px 24px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.18);
+    }
+    .api-banner .logo {
+      width: 52px; height: 52px;
+      background: rgba(255,255,255,.15);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+    }
+    .api-banner h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.3px; }
+    .api-banner p  { margin: 4px 0 0; font-size: 13px; opacity: .8; }
+    .api-banner .badge {
+      margin-left: auto;
+      background: rgba(255,255,255,.2);
+      border: 1px solid rgba(255,255,255,.35);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .5px;
+    }
+
+    /* ── Wrapper ── */
+    #swagger-ui { max-width: 1280px; margin: 0 auto; padding: 28px 24px 60px; }
+
+    /* ── Hide default topbar ── */
+    .swagger-ui .topbar { display: none !important; }
+
+    /* ── Info block ── */
+    .swagger-ui .info { margin: 0 0 24px; }
+    .swagger-ui .info .title { font-family: 'Inter', sans-serif; font-size: 26px; font-weight: 700; color: #1a1a2e; }
+    .swagger-ui .info p, .swagger-ui .info li { font-family: 'Inter', sans-serif; color: #444; }
+
+    /* ── Scheme container (Authorize button row) ── */
+    .swagger-ui .scheme-container {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.07);
+      padding: 16px 24px;
+      margin-bottom: 24px;
+    }
+
+    /* ── Tag sections ── */
+    .swagger-ui .opblock-tag {
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a2e;
+      border-bottom: 2px solid #e8edf3;
+      padding-bottom: 8px;
+    }
+    .swagger-ui .opblock-tag:hover { background: transparent; }
+
+    /* ── Operation blocks ── */
+    .swagger-ui .opblock {
+      border-radius: 10px !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06) !important;
+      margin-bottom: 10px !important;
+      border: none !important;
+      overflow: hidden;
+    }
+    .swagger-ui .opblock .opblock-summary {
+      padding: 12px 16px;
+      font-family: 'Inter', sans-serif;
+    }
+    .swagger-ui .opblock .opblock-summary-description {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: #555;
+    }
+
+    /* Method colours */
+    .swagger-ui .opblock.opblock-get    { background: #e8f4fd !important; border-left: 4px solid #1a73e8 !important; }
+    .swagger-ui .opblock.opblock-post   { background: #e6f9f0 !important; border-left: 4px solid #0f9d58 !important; }
+    .swagger-ui .opblock.opblock-put    { background: #fff8e1 !important; border-left: 4px solid #f9ab00 !important; }
+    .swagger-ui .opblock.opblock-patch  { background: #fce8e6 !important; border-left: 4px solid #ea4335 !important; }
+    .swagger-ui .opblock.opblock-delete { background: #fce8e6 !important; border-left: 4px solid #d93025 !important; }
+
+    .swagger-ui .opblock-summary-method {
+      border-radius: 6px !important;
+      font-family: 'Inter', sans-serif !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+      min-width: 70px !important;
+      text-align: center !important;
+    }
+
+    /* ── Buttons ── */
+    .swagger-ui .btn.authorize {
+      background: #1a73e8 !important;
+      border-color: #1a73e8 !important;
+      color: #fff !important;
+      border-radius: 8px !important;
+      font-family: 'Inter', sans-serif !important;
+      font-weight: 600 !important;
+      padding: 8px 20px !important;
+    }
+    .swagger-ui .btn.authorize svg { fill: #fff !important; }
+    .swagger-ui .btn.execute {
+      background: #0f9d58 !important;
+      border-color: #0f9d58 !important;
+      border-radius: 8px !important;
+      font-family: 'Inter', sans-serif !important;
+      font-weight: 600 !important;
+    }
+    .swagger-ui .btn { border-radius: 8px !important; font-family: 'Inter', sans-serif !important; }
+
+    /* ── Response / code blocks ── */
+    .swagger-ui .responses-inner { background: #f8fafc; border-radius: 8px; padding: 12px; }
+    .swagger-ui .microlight { font-size: 13px !important; }
+
+    /* ── Models section ── */
+    .swagger-ui section.models { border-radius: 12px; overflow: hidden; }
+    .swagger-ui section.models h4 { font-family: 'Inter', sans-serif; font-weight: 600; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f0f4f8; }
+    ::-webkit-scrollbar-thumb { background: #b0bec5; border-radius: 3px; }
+  </style>
 </head>
 <body>
+  <div class="api-banner">
+    <div class="logo">💊</div>
+    <div>
+      <h1>Medical E-Commerce API</h1>
+      <p>Interactive REST API Documentation</p>
+    </div>
+    <span class="badge">v1.0.0</span>
+  </div>
+
   <div id="swagger-ui"></div>
-  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"
-          crossorigin="anonymous"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin="anonymous"></script>
   <script>
     SwaggerUIBundle({
       url: ${JSON.stringify(specUrl)},
@@ -217,6 +362,11 @@ app.get('/api/v1/docs', (req, res) => {
       layout: 'BaseLayout',
       deepLinking: true,
       persistAuthorization: true,
+      displayRequestDuration: true,
+      filter: true,
+      tryItOutEnabled: false,
+      defaultModelsExpandDepth: -1,
+      docExpansion: 'none',
     });
   </script>
 </body>
