@@ -58,7 +58,30 @@ function toInclude(populate = []) {
   return Object.keys(include).length ? include : undefined;
 }
 
-// Shared helper: read variants Json[], apply delta fn, write back.
+function toSelect(selectStr, include) {
+  const fields = selectStr.split(' ').filter(Boolean);
+  const sel = { id: true };
+  const fieldMap = {
+    name: 'name', slug: 'slug', price: 'price', compareAtPrice: 'compareAtPrice',
+    thumbnail: ['thumbnailUrl', 'thumbnailPublicId'], averageRating: 'averageRating',
+    ratingCount: 'ratingCount', stock: 'stock', isFeatured: 'isFeatured',
+    isActive: 'isActive', brand: 'brand', createdAt: 'createdAt', updatedAt: 'updatedAt',
+    sku: 'sku', tags: 'tags', totalSold: 'totalSold', description: 'description',
+    shortDescription: 'shortDescription', images: 'images', variants: 'variants',
+    category: null, subcategory: null,
+  };
+  for (const f of fields) {
+    const mapped = fieldMap[f];
+    if (!mapped) continue;
+    if (Array.isArray(mapped)) mapped.forEach((m) => { sel[m] = true; });
+    else sel[mapped] = true;
+  }
+  if (include?.category)    sel.category    = include.category;
+  if (include?.subcategory) sel.subcategory = include.subcategory;
+  return sel;
+}
+
+
 async function mutateVariantStock(productId, variantId, deltaFn, extraData = {}) {
   const product = await prisma.product.findUnique({ where: { id: productId }, select: { variants: true } });
   if (!product) return null;
@@ -80,11 +103,12 @@ class ProductRepository {
   }
 
   async findAll(filter = {}, options = {}) {
-    const { sort = { createdAt: -1 }, skip = 0, limit = 20, populate = [] } = options;
+    const { sort = { createdAt: -1 }, skip = 0, limit = 20, populate = [], select } = options;
     const include = toInclude(populate);
+    const prismaSelect = select ? toSelect(select, include) : undefined;
     const rows = await prisma.product.findMany({
       where: toWhere(filter), orderBy: toOrderBy(sort), skip, take: limit,
-      ...(include ? { include } : {}),
+      ...(prismaSelect ? { select: prismaSelect } : include ? { include } : {}),
     });
     return rows.map(toMongo);
   }

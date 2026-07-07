@@ -17,6 +17,7 @@ class ProductService {
     const [products, total] = await Promise.all([
       productRepo.findAll(filter, {
         sort, skip, limit,
+        select: 'name slug price compareAtPrice thumbnail averageRating ratingCount stock isFeatured isActive brand category subcategory createdAt',
         populate: [{ path: 'category' }, { path: 'subcategory' }],
       }),
       productRepo.count(filter),
