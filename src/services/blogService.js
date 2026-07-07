@@ -30,16 +30,15 @@ class BlogService {
     const cacheKey = `blog:${slug}`;
     const cached = await cacheService.get(cacheKey);
     if (cached) {
-      blogRepo.incrementViews(cached._id).catch(() => {});
+      blogRepo.incrementViews(cached.id).catch(() => {});
       return cached;
     }
 
     const blog = await blogRepo.findBySlug(slug);
     if (!blog) throw ApiError.notFound(MESSAGES.BLOG_NOT_FOUND);
 
-    blogRepo.incrementViews(blog._id).catch(() => {});
-    // Cache without views so stale count isn't frozen
-    const { views: _views, ...blogToCache } = blog;
+    blogRepo.incrementViews(blog.id).catch(() => {});
+    const { views: _v, ...blogToCache } = blog;
     await cacheService.set(cacheKey, blogToCache, CACHE_TTL.BLOG_DETAIL);
     return blog;
   }
@@ -163,8 +162,8 @@ class BlogService {
   }
 
   async likeBlog(id) {
-    const blog = await blogRepo.findById(id);
-    if (!blog) throw ApiError.notFound(MESSAGES.BLOG_NOT_FOUND);
+    const exists = await blogRepo.findById(id);
+    if (!exists) throw ApiError.notFound(MESSAGES.BLOG_NOT_FOUND);
     return blogRepo.toggleLike(id, true);
   }
 }

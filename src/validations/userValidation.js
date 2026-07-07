@@ -1,27 +1,33 @@
 'use strict';
 
 const Joi = require('joi');
+const { email, phone, password } = require('./common');
 
 const updateProfile = Joi.object({
   firstName: Joi.string().trim().min(2).max(50).optional(),
-  lastName: Joi.string().trim().min(2).max(50).optional(),
-  phone: Joi.string().allow('').pattern(/^[6-9]\d{9}$/).optional(),
+  lastName:  Joi.string().trim().min(2).max(50).optional(),
+  phone:     phone().allow('').optional(),
   // email change requires a dedicated verify-new-email flow — not allowed here
-  password: Joi.string().allow('').min(8).max(72).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).optional()
-    .messages({ 'string.pattern.base': 'Password must have uppercase, lowercase, and a number.' }),
+  // currentPassword is required when changing password to prevent account takeover
+  currentPassword: Joi.string().when('password', {
+    is:        Joi.string().min(1).exist(),
+    then:      Joi.required(),
+    otherwise: Joi.optional(),
+  }),
+  password: password().allow('').optional(),
 });
 
 const addAddress = Joi.object({
-  label: Joi.string().optional().default('Home'),
-  fullName: Joi.string().trim().required(),
-  phone: Joi.string().pattern(/^[6-9]\d{9}$/).required(),
+  label:        Joi.string().optional().default('Home'),
+  fullName:     Joi.string().trim().required(),
+  phone:        phone().required(),
   addressLine1: Joi.string().trim().required(),
   addressLine2: Joi.string().trim().optional(),
-  city: Joi.string().trim().required(),
-  state: Joi.string().trim().required(),
-  pincode: Joi.string().pattern(/^\d{6}$/).required(),
-  country: Joi.string().default('India').optional(),
-  isDefault: Joi.boolean().default(false),
+  city:         Joi.string().trim().required(),
+  state:        Joi.string().trim().required(),
+  pincode:      Joi.string().pattern(/^\d{6}$/).required(),
+  country:      Joi.string().default('India').optional(),
+  isDefault:    Joi.boolean().default(false),
 });
 
 const updateAddress = addAddress.fork(Object.keys(addAddress.describe().keys), (s) => s.optional());

@@ -1,33 +1,33 @@
 'use strict';
 
 const Joi = require('joi');
+const { email, phone, password } = require('./common');
 
 const register = Joi.object({
   firstName: Joi.string().trim().min(2).max(50).required(),
-  lastName: Joi.string().trim().min(2).max(50).required(),
-  email: Joi.string().email().lowercase().required(),
-  phone: Joi.string().pattern(/^[6-9]\d{9}$/).required().messages({ 'string.pattern.base': 'Invalid Indian phone number.' }),
-  password: Joi.string().min(8).max(72).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).required()
-    .messages({ 'string.pattern.base': 'Password must have uppercase, lowercase, and a number.' }),
-  address: Joi.string().allow('').trim().optional(),
-  pincode: Joi.string().allow('').trim().optional(),
-  landmark: Joi.string().allow('').trim().optional(),
-  city: Joi.string().allow('').trim().optional(),
-  state: Joi.string().allow('').trim().optional(),
+  lastName:  Joi.string().trim().min(2).max(50).required(),
+  email:     email().required(),
+  phone:     phone().required(),
+  password:  password().required(),
+  address:   Joi.string().allow('').trim().optional(),
+  pincode:   Joi.string().allow('').trim().optional(),
+  landmark:  Joi.string().allow('').trim().optional(),
+  city:      Joi.string().allow('').trim().optional(),
+  state:     Joi.string().allow('').trim().optional(),
 });
 
 const login = Joi.object({
-  email: Joi.string().email().lowercase().required(),
+  email:    email().required(),
   password: Joi.string().required(),
 });
 
 const forgotPassword = Joi.object({
-  email: Joi.string().email().lowercase().required(),
+  email: email().required(),
 });
 
 const resetPassword = Joi.object({
-  token: Joi.string().required(),
-  password: Joi.string().min(8).max(72).pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).required(),
+  token:    Joi.string().required(),
+  password: password().required(),
 });
 
 const sendOTP = Joi.object({
@@ -36,7 +36,7 @@ const sendOTP = Joi.object({
 
 const verifyOTP = Joi.object({
   emailOrPhone: Joi.string().required(),
-  otp: Joi.string().length(6).required(),
+  otp:          Joi.string().length(6).required(),
 });
 
 const refreshToken = Joi.object({

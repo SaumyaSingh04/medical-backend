@@ -780,6 +780,6 @@ router.delete('/:id', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), a
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.delete('/:id/images', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), auditLog('delete_image', 'Product'), ctrl.deleteProductImage);
+router.delete('/:id/images', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), validate(v.deleteImage), auditLog('delete_image', 'Product'), ctrl.deleteProductImage);
 
 module.exports = router;

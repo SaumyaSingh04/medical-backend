@@ -5,58 +5,46 @@ const orderService = require('../services/orderService');
 const { sendSuccess, sendPaginated } = require('../helpers/ApiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const { MESSAGES, ROLES } = require('../constants');
+const ApiError = require('../helpers/ApiError');
+
+const clamp = (val, min, max, def) => Math.max(min, Math.min(max, parseInt(val, 10) || def));
+
+// Factory for the four analytics handlers that share the same range/from/to signature
+const analyticsHandler = (method) =>
+  asyncHandler(async (req, res) => {
+    const { range = 'thisMonth', from, to } = req.query;
+    sendSuccess(res, MESSAGES.FETCHED, await adminService[method](range, from, to));
+  });
 
 const getDashboard = asyncHandler(async (req, res) => {
-  const stats = await adminService.getDashboardStats();
-  sendSuccess(res, MESSAGES.FETCHED, stats);
+  sendSuccess(res, MESSAGES.FETCHED, await adminService.getDashboardStats());
 });
 
-const getRevenueAnalytics = asyncHandler(async (req, res) => {
-  const { range = 'thisMonth', from, to } = req.query;
-  const data = await adminService.getRevenueAnalytics(range, from, to);
-  sendSuccess(res, MESSAGES.FETCHED, data);
-});
-
-const getSalesAnalytics = asyncHandler(async (req, res) => {
-  const { range = 'thisMonth', from, to } = req.query;
-  const data = await adminService.getSalesAnalytics(range, from, to);
-  sendSuccess(res, MESSAGES.FETCHED, data);
-});
-
-const getCustomerAnalytics = asyncHandler(async (req, res) => {
-  const { range = 'thisMonth', from, to } = req.query;
-  const data = await adminService.getCustomerAnalytics(range, from, to);
-  sendSuccess(res, MESSAGES.FETCHED, data);
-});
-
-const getOrderAnalytics = asyncHandler(async (req, res) => {
-  const { range = 'thisMonth', from, to } = req.query;
-  const data = await adminService.getOrderAnalytics(range, from, to);
-  sendSuccess(res, MESSAGES.FETCHED, data);
-});
+const getRevenueAnalytics  = analyticsHandler('getRevenueAnalytics');
+const getSalesAnalytics    = analyticsHandler('getSalesAnalytics');
+const getCustomerAnalytics = analyticsHandler('getCustomerAnalytics');
+const getOrderAnalytics    = analyticsHandler('getOrderAnalytics');
 
 const getTopProducts = asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
-  const data = await adminService.getTopProducts(limit);
-  sendSuccess(res, MESSAGES.FETCHED, data);
+  sendSuccess(res, MESSAGES.FETCHED, await adminService.getTopProducts(clamp(req.query.limit, 1, 50, 10)));
 });
 
 const getLowStockAlerts = asyncHandler(async (req, res) => {
-  const threshold = parseInt(req.query.threshold, 10) || 10;
-  const data = await adminService.getLowStockAlerts(threshold);
-  sendSuccess(res, MESSAGES.FETCHED, data);
+  const { threshold } = req.query;
+  const parsed = parseInt(threshold, 10);
+  if (threshold !== undefined && isNaN(parsed)) {
+    throw ApiError.badRequest('threshold must be a non-negative integer.');
+  }
+  sendSuccess(res, MESSAGES.FETCHED, await adminService.getLowStockAlerts(Math.max(0, isNaN(parsed) ? 10 : parsed)));
 });
 
 const getRecentActivities = asyncHandler(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
-  const data = await adminService.getRecentActivities(limit);
-  sendSuccess(res, MESSAGES.FETCHED, data);
+  sendSuccess(res, MESSAGES.FETCHED, await adminService.getRecentActivities(clamp(req.query.limit, 1, 100, 20)));
 });
 
 const getSalesReport = asyncHandler(async (req, res) => {
   const { startDate, endDate } = req.query;
-  const report = await adminService.getSalesReport(startDate, endDate);
-  sendSuccess(res, MESSAGES.FETCHED, report);
+  sendSuccess(res, MESSAGES.FETCHED, await adminService.getSalesReport(startDate, endDate));
 });
 
 const listUsers = asyncHandler(async (req, res) => {
@@ -70,13 +58,11 @@ const listCustomers = asyncHandler(async (req, res) => {
 });
 
 const toggleUserStatus = asyncHandler(async (req, res) => {
-  const user = await adminService.toggleUserStatus(req.params.id);
-  sendSuccess(res, MESSAGES.UPDATED, user);
+  sendSuccess(res, MESSAGES.UPDATED, await adminService.toggleUserStatus(req.params.id));
 });
 
 const updateUserRole = asyncHandler(async (req, res) => {
-  const user = await adminService.updateUserRole(req.params.id, req.body.role);
-  sendSuccess(res, MESSAGES.UPDATED, user);
+  sendSuccess(res, MESSAGES.UPDATED, await adminService.updateUserRole(req.params.id, req.body.role));
 });
 
 const listProducts = asyncHandler(async (req, res) => {

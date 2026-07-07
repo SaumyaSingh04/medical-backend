@@ -26,20 +26,17 @@ class ProductService {
   }
 
   async getProductBySlug(slug) {
-    const cacheKey = `product:${slug}`;
-    const cached = await cacheService.get(cacheKey);
-    if (cached) return cached;
-
-    const product = await productRepo.findOne({ slug, isActive: true }, {
-      populate: [
-        { path: 'category', select: 'name slug' },
-        { path: 'subcategory', select: 'name slug' },
-      ],
+    const cacheKey = `product:slug:${slug}`;
+    return cacheService.remember(cacheKey, CACHE_TTL.PRODUCT_DETAIL, async () => {
+      const product = await productRepo.findOne({ slug, isActive: true }, {
+        populate: [
+          { path: 'category', select: 'name slug' },
+          { path: 'subcategory', select: 'name slug' },
+        ],
+      });
+      if (!product) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
+      return product;
     });
-    if (!product) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
-
-    await cacheService.set(cacheKey, product, CACHE_TTL.PRODUCT_DETAIL);
-    return product;
   }
 
   async getProductById(id) {
@@ -66,12 +63,17 @@ class ProductService {
       data.images = [...(product.images || []), ...newImages];
     }
 
-    // Convert string booleans from FormData
-    if (data.isActive !== undefined) data.isActive = data.isActive === 'true' || data.isActive === true;
-    if (data.isFeatured !== undefined) data.isFeatured = data.isFeatured === 'true' || data.isFeatured === true;
+    // Normalise string booleans from multipart/form-data
+    if (data.isActive   !== undefined) data.isActive   = data.isActive   === true || data.isActive   === 'true';
+    if (data.isFeatured !== undefined) data.isFeatured = data.isFeatured === true || data.isFeatured === 'true';
 
-    const updated = await productRepo.updateById(id, data, { new: true, runValidators: true });
-    await cacheService.del(`product:${product.slug}`);
+    const updated = await productRepo.updateById(id, data);
+    const cacheInvalidations = [cacheService.del(`product:slug:${product.slug}`)];
+    // If slug changed, also bust the new slug key.
+    if (data.slug && data.slug !== product.slug) {
+      cacheInvalidations.push(cacheService.del(`product:slug:${data.slug}`));
+    }
+    await Promise.all(cacheInvalidations);
     return updated;
   }
 
@@ -86,7 +88,10 @@ class ProductService {
     );
 
     await productRepo.deleteById(id);
-    await cacheService.del(`product:${product.slug}`);
+    await Promise.all([
+      cacheService.del(`product:slug:${product.slug}`),
+      cacheService.invalidatePattern('products:*'),
+    ]);
     return { message: MESSAGES.DELETED };
   }
 
@@ -95,19 +100,16 @@ class ProductService {
     return productRepo.removeImage(productId, publicId);
   }
 
-async getFeaturedProducts(limit = 6) {
-    const featured = await productRepo.findAll({ isFeatured: true, isActive: true }, {
-      limit, sort: { averageRating: -1, ratingCount: -1 },
+  async getFeaturedProducts(limit = 6) {
+    const opts = {
+      limit,
+      sort: { averageRating: -1, ratingCount: -1 },
       select: 'name slug price compareAtPrice thumbnail averageRating ratingCount stock isFeatured category',
       populate: [{ path: 'category', select: 'name slug' }],
-    });
+    };
+    const featured = await productRepo.findAll({ isFeatured: true, isActive: true }, opts);
     if (featured.length > 0) return featured;
-    // Fallback: return top-rated active products
-    return productRepo.findAll({ isActive: true }, {
-      limit, sort: { averageRating: -1, ratingCount: -1 },
-      select: 'name slug price compareAtPrice thumbnail averageRating ratingCount stock isFeatured category',
-      populate: [{ path: 'category', select: 'name slug' }],
-    });
+    return productRepo.findAll({ isActive: true }, opts);
   }
 }
 

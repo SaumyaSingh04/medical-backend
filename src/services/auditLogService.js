@@ -1,27 +1,30 @@
 'use strict';
 
 const { auditLogRepo } = require('../repositories');
-const { buildPaginationMeta } = require('../helpers/paginate');
+const { parsePagination, buildPaginationMeta } = require('../helpers/paginate');
+const logger = require('../utils/logger');
 
 class AuditLogService {
-  async log({ userId, role, action, entity, entityId, before = null, req = null }) {
-    return auditLogRepo.create({
-      userId:    userId   ?? null,
-      role:      role     ?? null,
-      action,
-      entity:    entity   ?? null,
-      entityId:  entityId ?? null,
-      before,
-      ipAddress: req?.ip ?? null,
-      userAgent: req?.headers?.['user-agent'] ?? null,
-    });
+  async log({ userId, role, action, entity, entityId, before = null, ipAddress = null, userAgent = null, requestId = null }) {
+    try {
+      return await auditLogRepo.create({
+        userId:    userId   ?? null,
+        role:      role     ?? null,
+        action,
+        entity:    entity   ?? null,
+        entityId:  entityId ?? null,
+        before,
+        ipAddress,
+        userAgent,
+        requestId,
+      });
+    } catch (err) {
+      logger.warn('AuditLogService.log failed', { action, entity, entityId, error: err.message });
+    }
   }
 
   async getLogs(queryParams) {
-    const page  = Math.max(parseInt(queryParams.page)  || 1, 1);
-    const limit = Math.min(parseInt(queryParams.limit) || 50, 200);
-    const skip  = (page - 1) * limit;
-
+    const { page, limit, skip } = parsePagination(queryParams);
     const { rows, total } = await auditLogRepo.findAll(
       {
         userId:   queryParams.userId,
@@ -33,7 +36,6 @@ class AuditLogService {
       },
       { skip, limit }
     );
-
     return { logs: rows, meta: buildPaginationMeta(total, page, limit) };
   }
 }

@@ -3,6 +3,9 @@
 const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
 const prisma = require('./prismaClient');
+const { toOrderBy } = require('./repoUtils');
+
+const BCRYPT_ROUNDS = 12;
 
 function toMongo(row) {
   if (!row) return null;
@@ -27,7 +30,7 @@ function toPrismaData(data) {
   const { avatar, _id, __v, id: _id2, ...rest } = data;
   const out = { ...rest };
   if (avatar !== undefined) {
-    out.avatarUrl = avatar?.url ?? null;
+    out.avatarUrl      = avatar?.url ?? null;
     out.avatarPublicId = avatar?.publicId ?? null;
   }
   return out;
@@ -36,40 +39,44 @@ function toPrismaData(data) {
 function toWhere(filter = {}) {
   const where = {};
   for (const [k, v] of Object.entries(filter)) {
-    if (k === '_id' || k === 'id') { where.id = v; continue; }
-    where[k] = v;
+    where[k === '_id' || k === 'id' ? 'id' : k] = v;
   }
   return where;
 }
 
-function toOrderBy(sort) {
-  if (!sort) return [{ createdAt: 'desc' }];
-  if (typeof sort === 'string') {
-    const field = sort.startsWith('-') ? sort.slice(1) : sort;
-    return [{ [field]: sort.startsWith('-') ? 'desc' : 'asc' }];
-  }
-  return Object.entries(sort).map(([k, v]) => ({ [k]: v === -1 || v === 'desc' ? 'desc' : 'asc' }));
+function buildSearchOR(search) {
+  return [
+    { firstName: { contains: search, mode: 'insensitive' } },
+    { lastName:  { contains: search, mode: 'insensitive' } },
+    { email:     { contains: search, mode: 'insensitive' } },
+  ];
+}
+
+async function hashPassword(plain) {
+  return bcrypt.hash(plain, await bcrypt.genSalt(BCRYPT_ROUNDS));
+}
+
+// Shared helper: fetch user addresses, apply transform fn, persist and return shaped user.
+async function mutateAddresses(userId, transformFn) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { addresses: true } });
+  if (!user) return null;
+  const addresses = transformFn(user.addresses);
+  const updated = await prisma.user.update({ where: { id: userId }, data: { addresses: { set: addresses } } });
+  return toMongo(updated);
 }
 
 class UserRepository {
   async findById(id) {
-    const row = await prisma.user.findUnique({ where: { id } });
-    return toMongo(row);
+    return toMongo(await prisma.user.findUnique({ where: { id } }));
   }
 
   async findOne(filter) {
-    const row = await prisma.user.findFirst({ where: toWhere(filter) });
-    return toMongo(row);
+    return toMongo(await prisma.user.findFirst({ where: toWhere(filter) }));
   }
 
   async findAll(filter = {}, options = {}) {
     const { sort = { createdAt: -1 }, skip = 0, limit = 20 } = options;
-    const rows = await prisma.user.findMany({
-      where: toWhere(filter),
-      orderBy: toOrderBy(sort),
-      skip,
-      take: limit,
-    });
+    const rows = await prisma.user.findMany({ where: toWhere(filter), orderBy: toOrderBy(sort), skip, take: limit });
     return rows.map(toMongo);
   }
 
@@ -79,50 +86,33 @@ class UserRepository {
 
   async create(data) {
     const out = toPrismaData(data);
-    // Normalize email to lowercase before storing
-    if (out.email) out.email = out.email.toLowerCase();
-    if (out.password) {
-      const salt = await bcrypt.genSalt(12);
-      out.password = await bcrypt.hash(out.password, salt);
-    }
-    const row = await prisma.user.create({ data: out });
-    return toMongo(row);
+    if (out.email)    out.email    = out.email.toLowerCase();
+    if (out.password) out.password = await hashPassword(out.password);
+    return toMongo(await prisma.user.create({ data: out }));
   }
 
   async updateById(id, data) {
     const out = toPrismaData(data);
-    if (out.password) {
-      const salt = await bcrypt.genSalt(12);
-      out.password = await bcrypt.hash(out.password, salt);
-    }
-    const row = await prisma.user.update({ where: { id }, data: out });
-    return toMongo(row);
+    if (out.password) out.password = await hashPassword(out.password);
+    return toMongo(await prisma.user.update({ where: { id }, data: out }));
   }
 
   async updateOne(filter, data) {
-    const existing = await prisma.user.findFirst({ where: toWhere(filter) });
+    const existing = await prisma.user.findFirst({ where: toWhere(filter), select: { id: true } });
     if (!existing) return null;
-    const row = await prisma.user.update({ where: { id: existing.id }, data: toPrismaData(data) });
-    return toMongo(row);
+    return toMongo(await prisma.user.update({ where: { id: existing.id }, data: toPrismaData(data) }));
   }
 
   async findByEmail(email) {
-    const row = await prisma.user.findFirst({ where: { email: email.toLowerCase() } });
-    return toMongo(row);
+    return toMongo(await prisma.user.findUnique({ where: { email: email.toLowerCase() } }));
   }
 
   async findByPhone(phone) {
-    const row = await prisma.user.findFirst({ where: { phone } });
-    return toMongo(row);
+    return toMongo(await prisma.user.findFirst({ where: { phone } }));
   }
 
   async addRefreshToken(userId, token) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { refreshTokens: true } });
-    if (!user) return;
-    await prisma.user.update({
-      where: { id: userId },
-      data: { refreshTokens: { set: [...user.refreshTokens, token] } },
-    });
+    await prisma.user.update({ where: { id: userId }, data: { refreshTokens: { push: token } } });
   }
 
   async removeRefreshToken(userId, token) {
@@ -138,7 +128,7 @@ class UserRepository {
     await prisma.user.update({ where: { id: userId }, data: { refreshTokens: { set: [] } } });
   }
 
-  // ─── Wishlist (Wishlist table) ─────────────────────────────────────────────
+  // ─── Wishlist ──────────────────────────────────────────────────────────────
 
   async getWishlist(userId) {
     return prisma.wishlist.findUnique({ where: { userId } });
@@ -146,7 +136,7 @@ class UserRepository {
 
   async getWishlistWithProducts(userId) {
     const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
-    if (!wishlist || !wishlist.items.length) return [];
+    if (!wishlist?.items?.length) return [];
 
     const productIds = wishlist.items.map((item) => item.productId).filter(Boolean);
     if (!productIds.length) return [];
@@ -154,18 +144,9 @@ class UserRepository {
     const products = await prisma.product.findMany({
       where: { id: { in: productIds }, isActive: true },
       select: {
-        id: true,
-        name: true,
-        slug: true,
-        price: true,
-        compareAtPrice: true,
-        thumbnailUrl: true,
-        thumbnailPublicId: true,
-        stock: true,
-        averageRating: true,
-        ratingCount: true,
-        brand: true,
-        isActive: true,
+        id: true, name: true, slug: true, price: true, compareAtPrice: true,
+        thumbnailUrl: true, thumbnailPublicId: true, stock: true,
+        averageRating: true, ratingCount: true, brand: true, isActive: true,
         category: { select: { id: true, name: true, slug: true } },
       },
     });
@@ -178,125 +159,95 @@ class UserRepository {
         const p = productMap.get(item.productId);
         return {
           productId: item.productId,
-          addedAt: item.addedAt,
+          addedAt:   item.addedAt,
           product: {
-            _id: p.id,
-            id: p.id,
-            name: p.name,
-            slug: p.slug,
-            price: p.price,
-            compareAtPrice: p.compareAtPrice,
+            _id: p.id, id: p.id, name: p.name, slug: p.slug,
+            price: p.price, compareAtPrice: p.compareAtPrice,
             thumbnail: p.thumbnailUrl ? { url: p.thumbnailUrl, publicId: p.thumbnailPublicId ?? null } : null,
-            stock: p.stock,
-            averageRating: p.averageRating,
-            ratingCount: p.ratingCount,
-            brand: p.brand,
-            isActive: p.isActive,
-            category: p.category ? { _id: p.category.id, id: p.category.id, name: p.category.name, slug: p.category.slug } : null,
+            stock: p.stock, averageRating: p.averageRating, ratingCount: p.ratingCount,
+            brand: p.brand, isActive: p.isActive,
+            category: p.category
+              ? { _id: p.category.id, id: p.category.id, name: p.category.name, slug: p.category.slug }
+              : null,
           },
         };
       });
   }
 
   async addToWishlist(userId, productId) {
-    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
+    const wishlist = await prisma.wishlist.upsert({
+      where:  { userId },
+      create: { userId, items: [] },
+      update: {},
+    });
 
-    if (!wishlist) {
-      return prisma.wishlist.create({
-        data: {
-          userId,
-          items: [{ productId: String(productId), addedAt: new Date().toISOString() }],
-        },
-      });
-    }
+    const pid = String(productId);
+    if (wishlist.items.some((item) => String(item.productId) === pid)) return wishlist;
 
-    const alreadyExists = wishlist.items.some((item) => String(item.productId) === String(productId));
-    if (alreadyExists) return wishlist;
-
-    const existingItems = wishlist.items.map((item) => ({ productId: String(item.productId), addedAt: item.addedAt }));
+    // Append new item — no need to re-map existing items since they're already stored correctly
     return prisma.wishlist.update({
       where: { userId },
-      data: {
-        items: { set: [...existingItems, { productId: String(productId), addedAt: new Date().toISOString() }] },
-      },
+      data:  { items: { set: [...wishlist.items, { productId: pid, addedAt: new Date().toISOString() }] } },
+    });
+  }
+
+  async updateWishlistItems(userId, items) {
+    return prisma.wishlist.upsert({
+      where:  { userId },
+      update: { items: { set: items } },
+      create: { userId, items },
     });
   }
 
   async removeFromWishlist(userId, productId) {
     const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
     if (!wishlist) return null;
-
-    const filtered = wishlist.items
-      .filter((item) => String(item.productId) !== String(productId))
-      .map((item) => ({ productId: String(item.productId), addedAt: item.addedAt }));
-
-    return prisma.wishlist.update({
-      where: { userId },
-      data: { items: { set: filtered } },
-    });
+    const filtered = wishlist.items.filter((item) => String(item.productId) !== String(productId));
+    return prisma.wishlist.update({ where: { userId }, data: { items: { set: filtered } } });
   }
 
   async clearWishlist(userId) {
     return prisma.wishlist.upsert({
-      where: { userId },
+      where:  { userId },
       update: { items: { set: [] } },
       create: { userId, items: [] },
     });
   }
 
   async isInWishlist(userId, productId) {
-    const wishlist = await prisma.wishlist.findUnique({ where: { userId } });
-    if (!wishlist) return false;
-    return wishlist.items.some((item) => String(item.productId) === String(productId));
+    const wishlist = await prisma.wishlist.findUnique({ where: { userId }, select: { items: true } });
+    return wishlist?.items.some((item) => String(item.productId) === String(productId)) ?? false;
   }
 
   async updateLastLogin(userId) {
     await prisma.user.update({ where: { id: userId }, data: { lastLogin: new Date() } });
   }
 
-  // Address management — Prisma stores addresses as Json[]
+  // ─── Addresses ─────────────────────────────────────────────────────────────
+
   async addAddress(userId, addressData) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { addresses: true } });
-    if (!user) return null;
-    if (addressData.isDefault) {
-      addressData = { ...addressData };
-      user.addresses = user.addresses.map((a) => ({ ...a, isDefault: false }));
-    }
-    const id = randomUUID();
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: { addresses: { set: [...user.addresses, { ...addressData, id }] } },
+    return mutateAddresses(userId, (addresses) => {
+      const base = addressData.isDefault ? addresses.map((a) => ({ ...a, isDefault: false })) : addresses;
+      return [...base, { ...addressData, id: randomUUID() }];
     });
-    return toMongo(updated);
   }
 
   async updateAddress(userId, addressId, addressData) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { addresses: true } });
-    if (!user) return null;
-    const addresses = user.addresses.map((a) =>
-      (a.id === addressId || a._id === addressId) ? { ...a, ...addressData } : a
+    return mutateAddresses(userId, (addresses) =>
+      addresses.map((a) => (a.id === addressId || a._id === addressId ? { ...a, ...addressData } : a))
     );
-    const updated = await prisma.user.update({ where: { id: userId }, data: { addresses: { set: addresses } } });
-    return toMongo(updated);
   }
 
   async deleteAddress(userId, addressId) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { addresses: true } });
-    if (!user) return null;
-    const addresses = user.addresses.filter((a) => a.id !== addressId && a._id !== addressId);
-    const updated = await prisma.user.update({ where: { id: userId }, data: { addresses: { set: addresses } } });
-    return toMongo(updated);
+    return mutateAddresses(userId, (addresses) =>
+      addresses.filter((a) => a.id !== addressId && a._id !== addressId)
+    );
   }
 
   async setDefaultAddress(userId, addressId) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { addresses: true } });
-    if (!user) return null;
-    const addresses = user.addresses.map((a) => ({
-      ...a,
-      isDefault: (a.id === addressId || a._id === addressId),
-    }));
-    const updated = await prisma.user.update({ where: { id: userId }, data: { addresses: { set: addresses } } });
-    return toMongo(updated);
+    return mutateAddresses(userId, (addresses) =>
+      addresses.map((a) => ({ ...a, isDefault: a.id === addressId || a._id === addressId }))
+    );
   }
 
   async incrementOtpAttempts(userId) {
@@ -304,34 +255,14 @@ class UserRepository {
   }
 
   async searchUsers(search, filter = {}, skip = 0, limit = 20) {
-    const where = toWhere(filter);
     return prisma.user.findMany({
-      where: {
-        ...where,
-        OR: [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      },
-      skip,
-      take: limit,
-      orderBy: { createdAt: 'desc' },
+      where: { ...toWhere(filter), OR: buildSearchOR(search) },
+      skip, take: limit, orderBy: { createdAt: 'desc' },
     });
   }
 
   async countSearch(search, filter = {}) {
-    const where = toWhere(filter);
-    return prisma.user.count({
-      where: {
-        ...where,
-        OR: [
-          { firstName: { contains: search, mode: 'insensitive' } },
-          { lastName: { contains: search, mode: 'insensitive' } },
-          { email: { contains: search, mode: 'insensitive' } },
-        ],
-      },
-    });
+    return prisma.user.count({ where: { ...toWhere(filter), OR: buildSearchOR(search) } });
   }
 }
 

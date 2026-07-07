@@ -8,21 +8,22 @@ const notificationService = require('./notificationService');
 const { generateInvoicePDF } = require('../utils/pdfGenerator');
 const ApiError = require('../helpers/ApiError');
 const { parsePagination, buildPaginationMeta } = require('../helpers/paginate');
-const { ORDER_STATUS, PAYMENT_METHOD, PAYMENT_STATUS, MESSAGES, NOTIFICATION_TYPE, COD_SETTINGS } = require('../constants');
+const { ORDER_STATUS, PAYMENT_METHOD, PAYMENT_STATUS, MESSAGES, NOTIFICATION_TYPE, COD_SETTINGS, ROLES } = require('../constants');
 const { uploadBuffer } = require('../config/cloudinary');
 const { paymentRepo } = require('../repositories');
 const { addWhatsAppJob } = require('../jobs');
 const { emitOrderStatusUpdate } = require('../sockets/orderSocket');
 const { getIO } = require('../sockets');
+const prisma = require('../repositories/prismaClient');
+
+const FREE_SHIPPING_THRESHOLD = 499;
+const SHIPPING_CHARGE = 49;
 
 class OrderService {
   async placeOrder(userId, { items, shippingAddressId, paymentMethod, couponCode, customerNote }) {
-    // Validate items & compute pricing — fetch all products in parallel (no N+1)
-    const orderItems = [];
-    let subtotal = 0;
-
-    const [products, user] = await Promise.all([
-      Promise.all(items.map((item) => productRepo.findById(item.productId))),
+    const productIds = items.map((item) => item.productId);
+    const [productRows, user] = await Promise.all([
+      productRepo.findManyByIds(productIds),
       userRepo.findById(userId),
     ]);
 
@@ -32,14 +33,17 @@ class OrderService {
     );
     if (!address) throw ApiError.badRequest('Shipping address not found.');
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const product = products[i];
+    const productMap = new Map(productRows.map((p) => [p.id, p]));
+    const orderItems = [];
+    let subtotal = 0;
+
+    for (const item of items) {
+      const product = productMap.get(item.productId);
       if (!product || !product.isActive) throw ApiError.notFound(MESSAGES.PRODUCT_NOT_FOUND);
 
       let price = product.price;
-      let name = product.name;
       let variantDetails = null;
+      let availableStock = product.stock;
 
       if (item.variantId) {
         const variant = (product.variants || []).find(
@@ -47,6 +51,7 @@ class OrderService {
         );
         if (!variant) throw ApiError.badRequest('Variant not found.');
         price = variant.price;
+        availableStock = variant.stock ?? 0;
         variantDetails = {
           name:  variant.name  ?? null,
           color: variant.color ?? variant.attributes?.color ?? null,
@@ -54,12 +59,16 @@ class OrderService {
         };
       }
 
+      if (availableStock < item.quantity) {
+        throw ApiError.badRequest(`Insufficient stock for "${product.name}". Available: ${availableStock}.`);
+      }
+
       const totalPrice = Number(price) * item.quantity;
       subtotal += totalPrice;
       orderItems.push({
         product: product.id,
         variant: item.variantId ?? null,
-        name,
+        name: product.name,
         slug: product.slug,
         thumbnail: product.thumbnailUrl ?? product.thumbnail?.url ?? null,
         sku: product.sku ?? null,
@@ -71,46 +80,65 @@ class OrderService {
       });
     }
 
-    // Shipping & tax (simplified)
-    const shippingCharge = subtotal >= 499 ? 0 : 49;
+    const shippingCharge = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : SHIPPING_CHARGE;
     const taxAmount = 0;
-    const couponDiscount = 0; // Applied via cart service
+    const couponDiscount = 0;
     const codConfirmationCharge = paymentMethod === PAYMENT_METHOD.COD ? COD_SETTINGS.CONFIRMATION_CHARGE : 0;
-    const totalAmount = subtotal + shippingCharge + taxAmount - couponDiscount; // codConfirmationCharge is prepaid, not added to total
+    const totalAmount = subtotal + shippingCharge + taxAmount - couponDiscount;
 
-    const order = await orderRepo.create({
-      user: userId,
-      items: orderItems,
-      subtotal,
-      shippingCharge,
-      taxAmount,
-      couponCode,
-      couponDiscount,
-      codConfirmationCharge,
-      totalAmount,
-      shippingAddress: address,
-      paymentMethod,
-      status: ORDER_STATUS.PENDING,
-      customerNote,
+    // Wrap stock decrement + order creation in a transaction so a crash
+    // between the two operations cannot leave stock decremented with no order.
+    const order = await prisma.$transaction(async (tx) => {
+      // Decrement stock for each item
+      for (const item of items) {
+        if (!item.variantId) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity }, totalSold: { increment: item.quantity } },
+          });
+        } else {
+          const prod = await tx.product.findUnique({ where: { id: item.productId }, select: { variants: true } });
+          if (prod) {
+            const variants = prod.variants.map((v) =>
+              (v._id === item.variantId || v.id === item.variantId)
+                ? { ...v, stock: (v.stock || 0) - item.quantity }
+                : v
+            );
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { variants: { set: variants }, totalSold: { increment: item.quantity } },
+            });
+          }
+        }
+      }
+
+      // Create the order
+      return orderRepo.create({
+        user: userId,
+        items: orderItems,
+        subtotal,
+        shippingCharge,
+        taxAmount,
+        couponCode,
+        couponDiscount,
+        codConfirmationCharge,
+        totalAmount,
+        shippingAddress: address,
+        paymentMethod,
+        status: ORDER_STATUS.PENDING,
+        customerNote,
+      });
     });
 
-    // Decrement stock in parallel
-    await Promise.all(
-      items.map((item) => productRepo.decrementStock(item.productId, item.variantId, item.quantity).catch(() => {}))
-    );
-
-    // Clear cart
     await cartService.clearCart(userId);
 
-    // Notify user
-    await notificationService.createNotification(userId, {
+    notificationService.createNotification(userId, {
       type: NOTIFICATION_TYPE.ORDER_PLACED,
       title: 'Order Placed!',
       message: `Your order #${order.orderNumber} has been placed successfully.`,
       data: { orderId: order.id },
-    });
+    }).catch(() => {});
 
-    // WhatsApp — fire-and-forget via queue
     if (user.phone) {
       addWhatsAppJob('sendOrderConfirmed', user.phone, [user.firstName || 'Customer', order.orderNumber, order.totalAmount]).catch(() => {});
     }
@@ -131,19 +159,20 @@ class OrderService {
     const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
     const orderUserId = order.user?.id ?? order.user;
-    if (role !== 'admin' && orderUserId !== userId) throw ApiError.forbidden();
+    if (role !== ROLES.ADMIN && role !== ROLES.SUPER_ADMIN && String(orderUserId) !== String(userId)) {
+      throw ApiError.forbidden();
+    }
     return order;
   }
 
   async cancelOrder(orderId, userId, reason) {
     const order = await orderRepo.findById(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (order.user !== userId) throw ApiError.forbidden();
+    if (String(order.user) !== String(userId)) throw ApiError.forbidden();
 
     const cancellable = [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED];
     if (!cancellable.includes(order.status)) throw ApiError.badRequest(MESSAGES.ORDER_CANCEL_FORBIDDEN);
 
-    // Re-stock in parallel — guard against null productId (SetNull on product delete)
     await Promise.all(
       order.items
         .filter((item) => item.product)
@@ -152,12 +181,12 @@ class OrderService {
 
     const updated = await orderRepo.addStatusHistory(orderId, ORDER_STATUS.CANCELLED, reason, userId);
 
-    await notificationService.createNotification(userId, {
+    notificationService.createNotification(userId, {
       type: NOTIFICATION_TYPE.ORDER_CANCELLED,
       title: 'Order Cancelled',
       message: `Order #${order.orderNumber} has been cancelled.`,
       data: { orderId: order.id },
-    });
+    }).catch(() => {});
 
     return updated;
   }
@@ -165,38 +194,29 @@ class OrderService {
   async requestReturn(orderId, userId, reason) {
     const order = await orderRepo.findById(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (order.user !== userId) throw ApiError.forbidden();
+    if (String(order.user) !== String(userId)) throw ApiError.forbidden();
     if (order.status !== ORDER_STATUS.DELIVERED) throw ApiError.badRequest('Only delivered orders can be returned.');
-
-    return orderRepo.updateById(orderId, {
-      status: ORDER_STATUS.RETURN_REQUESTED,
-      returnReason: reason,
-      returnRequestedAt: new Date(),
-    }).then(() => orderRepo.addStatusHistory(orderId, ORDER_STATUS.RETURN_REQUESTED, reason, userId));
+    return orderRepo.addStatusHistory(orderId, ORDER_STATUS.RETURN_REQUESTED, reason, userId);
   }
 
   async updateOrderStatus(orderId, status, note, adminId) {
-    // Use findWithPayment so the full user object is included — avoids a second DB hit
     const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
     const updated = await orderRepo.addStatusHistory(orderId, status, note, adminId);
 
-    // order.user is the full user object when fetched via findWithPayment
     const userId = order.user?.id ?? order.user?.toString();
-    await notificationService.createNotification(userId, {
+    notificationService.createNotification(userId, {
       type: NOTIFICATION_TYPE[`ORDER_${status.toUpperCase()}`] || NOTIFICATION_TYPE.SYSTEM,
       title: `Order ${status}`,
       message: `Your order #${order.orderNumber} status: ${status}.`,
       data: { orderId: order.id },
-    });
+    }).catch(() => {});
 
-    // Emit real-time status update via Socket.IO
     try {
       const io = getIO();
       emitOrderStatusUpdate(io, orderId, status, { note });
-    } catch (_) { /* Socket.IO not initialized — non-fatal */ }
+    } catch { /* Socket.IO not initialized — non-fatal */ }
 
-    // WhatsApp status notifications — user data already available, no extra DB call
     const orderUser = order.user;
     if (orderUser?.phone) {
       const name = orderUser.firstName || 'Customer';
@@ -213,11 +233,10 @@ class OrderService {
   async confirmCodOrder(orderId, userId) {
     const order = await orderRepo.findById(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
-    if (order.user !== userId) throw ApiError.forbidden();
+    if (String(order.user) !== String(userId)) throw ApiError.forbidden();
     if (order.paymentMethod !== PAYMENT_METHOD.COD) throw ApiError.badRequest('Not a COD order.');
     if (order.paymentStatus === PAYMENT_STATUS.PAID) throw ApiError.badRequest('COD charge already confirmed.');
 
-    // Create Payment record in DB for the ₹100 COD confirmation charge
     const payment = await paymentRepo.create({
       order: orderId,
       user: userId,
@@ -228,27 +247,36 @@ class OrderService {
       paidAt: new Date(),
     });
 
-    // Link payment, confirm order status and payment status
     await orderRepo.updateById(orderId, {
       payment: payment.id,
       paymentStatus: PAYMENT_STATUS.PAID,
       status: ORDER_STATUS.CONFIRMED,
     });
-    await orderRepo.addStatusHistory(orderId, ORDER_STATUS.CONFIRMED, `COD confirmation charge of ₹${COD_SETTINGS.CONFIRMATION_CHARGE} collected`, userId);
+    await orderRepo.addStatusHistory(
+      orderId,
+      ORDER_STATUS.CONFIRMED,
+      `COD confirmation charge of ₹${COD_SETTINGS.CONFIRMATION_CHARGE} collected`,
+      userId
+    );
 
-    await notificationService.createNotification(userId, {
+    notificationService.createNotification(userId, {
       type: NOTIFICATION_TYPE.PAYMENT_SUCCESS,
       title: 'COD Confirmed',
       message: `COD confirmation charge of ₹${COD_SETTINGS.CONFIRMATION_CHARGE} collected for order #${order.orderNumber}.`,
       data: { orderId: order.id },
-    });
+    }).catch(() => {});
 
     return { message: MESSAGES.COD_CHARGE_PAID, codConfirmationCharge: COD_SETTINGS.CONFIRMATION_CHARGE };
   }
 
-  async generateInvoice(orderId) {
+  async generateInvoice(orderId, userId, role) {
     const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
+
+    const orderUserId = order.user?.id ?? order.user;
+    if (role !== ROLES.ADMIN && role !== ROLES.SUPER_ADMIN && String(orderUserId) !== String(userId)) {
+      throw ApiError.forbidden();
+    }
 
     const pdfBuffer = await generateInvoicePDF(order);
     const uploaded = await uploadBuffer(pdfBuffer, 'invoices', {

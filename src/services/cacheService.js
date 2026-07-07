@@ -3,58 +3,133 @@
 const { getRedisClient } = require('../config/redis');
 const logger = require('../utils/logger');
 
+const DEFAULT_TTL = parseInt(process.env.REDIS_TTL, 10) || 3600;
+
+/**
+ * Safe JSON.parse — returns null on parse error.
+ * Guards against prototype-pollution via __proto__ / prototype keys.
+ */
+function safeParse(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      if ('__proto__' in parsed || 'prototype' in parsed) {
+        logger.warn('Cache: rejected value containing dangerous key.');
+        return null;
+      }
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function safeTtl(ttl) {
+  return Number.isInteger(ttl) && ttl > 0 ? ttl : DEFAULT_TTL;
+}
+
 class CacheService {
-  _client() { return getRedisClient(); }
+  _client() {
+    return getRedisClient();
+  }
 
   async get(key) {
     const client = this._client();
     if (!client) return null;
     try {
       const data = await client.get(key);
-      return data ? JSON.parse(data) : null;
+      return data ? safeParse(data) : null;
     } catch (err) {
-      logger.warn(`Cache GET error [${key}]:`, err.message);
+      logger.warn(`Cache GET error [${key}]: ${err.message}`);
       return null;
     }
   }
 
-  async set(key, value, ttl = parseInt(process.env.REDIS_TTL, 10) || 3600) {
+  async set(key, value, ttl = DEFAULT_TTL) {
     const client = this._client();
     if (!client) return;
     try {
-      await client.setex(key, ttl, JSON.stringify(value));
+      await client.set(key, JSON.stringify(value), 'EX', safeTtl(ttl));
     } catch (err) {
-      logger.warn(`Cache SET error [${key}]:`, err.message);
+      logger.warn(`Cache SET error [${key}]: ${err.message}`);
     }
   }
 
   async del(key) {
     const client = this._client();
     if (!client) return;
-    try { await client.del(key); } catch (err) { logger.warn(`Cache DEL error [${key}]:`, err.message); }
+    try {
+      await client.del(key);
+    } catch (err) {
+      logger.warn(`Cache DEL error [${key}]: ${err.message}`);
+    }
   }
 
+  /**
+   * Invalidate all keys matching a glob pattern using SCAN + pipelined DEL.
+   */
   async invalidatePattern(pattern) {
     const client = this._client();
     if (!client) return;
     try {
-      const keys = await client.keys(pattern);
-      if (!keys.length) return;
-      // Delete in batches of 100 to avoid argument limit crashes
-      for (let i = 0; i < keys.length; i += 100) {
-        await client.del(...keys.slice(i, i + 100));
-      }
+      let cursor = '0';
+      do {
+        const [next, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+        cursor = next;
+        if (keys.length) {
+          const pipeline = client.pipeline();
+          keys.forEach((k) => pipeline.del(k));
+          await pipeline.exec();
+        }
+      } while (cursor !== '0');
     } catch (err) {
-      logger.warn(`Cache invalidate pattern error [${pattern}]:`, err.message);
+      logger.warn(`Cache invalidatePattern error [${pattern}]: ${err.message}`);
     }
   }
 
+  /**
+   * Get-or-set: returns cached value if present, otherwise calls fetchFn,
+   * caches the result, and returns it.
+   */
   async remember(key, ttl, fetchFn) {
     const cached = await this.get(key);
     if (cached !== null) return cached;
     const data = await fetchFn();
-    await this.set(key, data, ttl);
+    if (data !== null && data !== undefined) {
+      await this.set(key, data, ttl);
+    }
     return data;
+  }
+
+  /**
+   * Batch get multiple keys in a single round-trip.
+   */
+  async mget(keys) {
+    const client = this._client();
+    if (!client || !keys.length) return keys.map(() => null);
+    try {
+      const values = await client.mget(keys);
+      return values.map((v) => (v ? safeParse(v) : null));
+    } catch (err) {
+      logger.warn(`Cache MGET error: ${err.message}`);
+      return keys.map(() => null);
+    }
+  }
+
+  /**
+   * Batch set multiple key-value pairs with the same TTL using a pipeline.
+   */
+  async mset(entries, ttl = DEFAULT_TTL) {
+    const client = this._client();
+    if (!client || !entries.length) return;
+    const t = safeTtl(ttl);
+    try {
+      const pipeline = client.pipeline();
+      entries.forEach(({ key, value }) => pipeline.set(key, JSON.stringify(value), 'EX', t));
+      await pipeline.exec();
+    } catch (err) {
+      logger.warn(`Cache MSET error: ${err.message}`);
+    }
   }
 }
 

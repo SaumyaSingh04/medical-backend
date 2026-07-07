@@ -18,13 +18,11 @@ const getLeads = asyncHandler(async (req, res) => {
 });
 
 const getLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.getLeadById(req.params.id);
-  sendSuccess(res, 'Lead fetched.', lead);
+  sendSuccess(res, 'Lead fetched.', await leadService.getLeadById(req.params.id));
 });
 
 const updateLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.updateLead(req.params.id, req.body, req.user.id);
-  sendSuccess(res, 'Lead updated.', lead);
+  sendSuccess(res, 'Lead updated.', await leadService.updateLead(req.params.id, req.body, req.user.id));
 });
 
 const deleteLead = asyncHandler(async (req, res) => {
@@ -32,35 +30,34 @@ const deleteLead = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Lead deleted.');
 });
 
+const restoreLead = asyncHandler(async (req, res) => {
+  sendSuccess(res, 'Lead restored.', await leadService.restoreLead(req.params.id, req.user.id));
+});
+
 // ─── Assignment ───────────────────────────────────────────────────────────────
 
 const assignLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.assignLead(req.params.id, req.body.assignedToId, req.user.id);
-  sendSuccess(res, 'Lead assigned.', lead);
+  sendSuccess(res, 'Lead assigned.', await leadService.assignLead(req.params.id, req.body.assignedToId, req.user.id));
 });
 
 // ─── CNP ──────────────────────────────────────────────────────────────────────
 
 const markCNP = asyncHandler(async (req, res) => {
-  const lead = await leadService.markCNP(req.params.id, req.user.id);
-  sendSuccess(res, 'Marked as CNP.', lead);
+  sendSuccess(res, 'Marked as CNP.', await leadService.markCNP(req.params.id, req.user.id));
 });
 
 const unmarkCNP = asyncHandler(async (req, res) => {
-  const lead = await leadService.unmarkCNP(req.params.id, req.user.id);
-  sendSuccess(res, 'CNP cleared.', lead);
+  sendSuccess(res, 'CNP cleared.', await leadService.unmarkCNP(req.params.id, req.user.id));
 });
 
 // ─── Notes ────────────────────────────────────────────────────────────────────
 
 const addNote = asyncHandler(async (req, res) => {
-  const note = await leadService.addNote(req.params.id, req.body, req.user.id);
-  sendSuccess(res, 'Note added.', note, HTTP_STATUS.CREATED);
+  sendSuccess(res, 'Note added.', await leadService.addNote(req.params.id, req.body, req.user.id), HTTP_STATUS.CREATED);
 });
 
 const getNotes = asyncHandler(async (req, res) => {
-  const notes = await leadService.getNotes(req.params.id);
-  sendSuccess(res, 'Notes fetched.', notes);
+  sendSuccess(res, 'Notes fetched.', await leadService.getNotes(req.params.id));
 });
 
 const deleteNote = asyncHandler(async (req, res) => {
@@ -71,18 +68,15 @@ const deleteNote = asyncHandler(async (req, res) => {
 // ─── Follow-ups ───────────────────────────────────────────────────────────────
 
 const addFollowUp = asyncHandler(async (req, res) => {
-  const followUp = await leadService.addFollowUp(req.params.id, req.body, req.user.id);
-  sendSuccess(res, 'Follow-up scheduled.', followUp, HTTP_STATUS.CREATED);
+  sendSuccess(res, 'Follow-up scheduled.', await leadService.addFollowUp(req.params.id, req.body, req.user.id), HTTP_STATUS.CREATED);
 });
 
 const getFollowUps = asyncHandler(async (req, res) => {
-  const followUps = await leadService.getFollowUps(req.params.id);
-  sendSuccess(res, 'Follow-ups fetched.', followUps);
+  sendSuccess(res, 'Follow-ups fetched.', await leadService.getFollowUps(req.params.id));
 });
 
 const updateFollowUp = asyncHandler(async (req, res) => {
-  const followUp = await leadService.updateFollowUp(req.params.id, req.params.followUpId, req.body, req.user.id);
-  sendSuccess(res, 'Follow-up updated.', followUp);
+  sendSuccess(res, 'Follow-up updated.', await leadService.updateFollowUp(req.params.id, req.params.followUpId, req.body, req.user.id));
 });
 
 const deleteFollowUp = asyncHandler(async (req, res) => {
@@ -90,48 +84,31 @@ const deleteFollowUp = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Follow-up deleted.');
 });
 
-// ─── Timeline ─────────────────────────────────────────────────────────────────
+// ─── Timeline & Analytics ─────────────────────────────────────────────────────
 
 const getTimeline = asyncHandler(async (req, res) => {
-  const timeline = await leadService.getTimeline(req.params.id);
-  sendSuccess(res, 'Timeline fetched.', timeline);
+  sendSuccess(res, 'Timeline fetched.', await leadService.getTimeline(req.params.id));
 });
 
-// ─── Analytics ────────────────────────────────────────────────────────────────
-
 const getLeadStats = asyncHandler(async (req, res) => {
-  const stats = await leadService.getLeadStats();
-  sendSuccess(res, 'Lead stats fetched.', stats);
+  sendSuccess(res, 'Lead stats fetched.', await leadService.getLeadStats());
 });
 
 const exportLeads = asyncHandler(async (req, res) => {
-  const leads = await leadService.exportLeads(req.query);
-  sendSuccess(res, 'Leads exported.', leads);
+  sendSuccess(res, 'Leads exported.', await leadService.exportLeads(req.query));
 });
 
-// ─── Restore ──────────────────────────────────────────────────────────────────
+// ─── Public submissions (factory) ─────────────────────────────────────────────
 
-const restoreLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.restoreLead(req.params.id, req.user.id);
-  sendSuccess(res, 'Lead restored.', lead);
-});
+const publicLeadHandler = (source, message) =>
+  asyncHandler(async (req, res) => {
+    const lead = await leadService.submitPublicLead(req.body, source);
+    sendSuccess(res, message, { id: lead.id }, HTTP_STATUS.CREATED);
+  });
 
-// ─── Public ───────────────────────────────────────────────────────────────────
-
-const submitWebsiteLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.submitPublicLead(req.body, 'website');
-  sendSuccess(res, 'Inquiry submitted successfully.', { id: lead.id }, HTTP_STATUS.CREATED);
-});
-
-const submitFranchiseLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.submitPublicLead(req.body, 'franchise_form');
-  sendSuccess(res, 'Franchise inquiry submitted.', { id: lead.id }, HTTP_STATUS.CREATED);
-});
-
-const submitDistributorLead = asyncHandler(async (req, res) => {
-  const lead = await leadService.submitPublicLead(req.body, 'distributor_form');
-  sendSuccess(res, 'Distributor inquiry submitted.', { id: lead.id }, HTTP_STATUS.CREATED);
-});
+const submitWebsiteLead     = publicLeadHandler('website',          'Inquiry submitted successfully.');
+const submitFranchiseLead   = publicLeadHandler('franchise_form',   'Franchise inquiry submitted.');
+const submitDistributorLead = publicLeadHandler('distributor_form', 'Distributor inquiry submitted.');
 
 module.exports = {
   createLead, getLeads, getLead, updateLead, deleteLead, restoreLead,

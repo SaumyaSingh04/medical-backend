@@ -1,7 +1,6 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const prisma = require('../repositories/prismaClient');
 const userRepo = require('../repositories/userRepo');
@@ -13,21 +12,32 @@ const { MESSAGES, TOKEN_TYPE, ROLES } = require('../constants');
 const analytics = require('./analyticsService');
 const { addWhatsAppJob } = require('../jobs');
 
-// Lazily resolved so the client always picks up the env var at call-time
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 30 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+
 function getGoogleClient() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId || clientId.includes('your_')) throw ApiError.badRequest('Google OAuth is not configured.');
   return new OAuth2Client(clientId);
 }
 
+/** Resolve a phone-or-email string to a user with a single targeted query. */
+async function findUserByPhoneOrEmail(phoneOrEmail) {
+  const isEmail = phoneOrEmail.includes('@');
+  return isEmail
+    ? userRepo.findByEmail(phoneOrEmail.toLowerCase())
+    : userRepo.findByPhone(phoneOrEmail);
+}
+
 class AuthService {
   async register({ firstName, lastName, email, phone, password, address, pincode, landmark, city, state }, req) {
-    const exists = await userRepo.findByEmail(email);
+    const normalizedEmail = email.toLowerCase();
+    const exists = await userRepo.findByEmail(normalizedEmail);
     if (exists) throw ApiError.conflict(MESSAGES.EMAIL_ALREADY_EXISTS);
 
-    const userData = { firstName, lastName, email, phone, password, role: ROLES.USER };
-    
-    // Add address if provided
+    const userData = { firstName, lastName, email: normalizedEmail, phone, password, role: ROLES.USER };
+
     if (address || pincode || city || state) {
       userData.addresses = [{
         fullName: `${firstName} ${lastName}`,
@@ -37,19 +47,14 @@ class AuthService {
         city: city || '',
         state: state || '',
         pincode: pincode || '',
-        isDefault: true
+        isDefault: true,
       }];
     }
 
-    // userData.isEmailVerified bypassed for local dev — remove this line for production
-    // userData.isEmailVerified = true;
-
     const user = await userRepo.create(userData);
 
-    // Track registration (fire-and-forget)
     if (req) analytics.track(() => analytics.trackRegistration(req, user.id, email));
 
-    // Send verification email
     const verifyToken_ = generateToken({ userId: user.id }, TOKEN_TYPE.EMAIL_VERIFY);
     const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${verifyToken_}`;
     await sendEmail({
@@ -63,26 +68,22 @@ class AuthService {
   }
 
   async login({ email, password }, req) {
-    const user = await userRepo.findByEmail(email);
+    const user = await userRepo.findByEmail(email.toLowerCase());
     if (!user) throw ApiError.unauthorized(MESSAGES.INVALID_CREDENTIALS);
     if (!user.isActive) throw ApiError.forbidden(MESSAGES.ACCOUNT_INACTIVE);
     if (user.lockUntil && user.lockUntil > new Date()) throw ApiError.forbidden('Account temporarily locked. Try again later.');
-
-    // Google-only accounts have no password set
     if (!user.password) throw ApiError.badRequest('This account uses Google sign-in. Please login with Google.');
 
     const isMatch = await user.comparePassword(password);
-    
+
     if (!isMatch) {
       await this._handleFailedLogin(user, email, req);
       throw ApiError.unauthorized(MESSAGES.INVALID_CREDENTIALS);
     }
 
-    // Restore email verification check for production
     if (!user.isEmailVerified) throw ApiError.forbidden(MESSAGES.ACCOUNT_NOT_VERIFIED);
 
     const { accessToken, refreshToken } = generateAuthTokens(user.id, user.role);
-    // Merge addRefreshToken + reset loginAttempts + updateLastLogin into parallel calls
     await Promise.all([
       userRepo.addRefreshToken(user.id, refreshToken),
       userRepo.updateById(user.id, {
@@ -91,16 +92,12 @@ class AuthService {
       }),
     ]);
 
-    // Track successful login — trackLogin is awaited so sessionId is available
-    // before res.finish fires in analyticsMiddleware
     if (req) {
       req.analyticsUserId = user.id;
       const sessionId = await analytics.trackLogin(req, {
         userId: user.id, email, success: true, sessionToken: refreshToken,
       });
       req.analyticsSessionId = sessionId;
-      // Also store on res.locals so res.on('finish') in analyticsMiddleware can read it
-      // even if the response object is already mid-flight
       if (sessionId && req.res) req.res.locals.analyticsSessionId = sessionId;
     }
 
@@ -108,15 +105,13 @@ class AuthService {
   }
 
   async _handleFailedLogin(user, email, req) {
-    const MAX_ATTEMPTS = 5;
-    const LOCK_DURATION_MS = 30 * 60 * 1000; // 30 min
     const attempts = (user.loginAttempts || 0) + 1;
     const update = { loginAttempts: attempts };
-    if (attempts >= MAX_ATTEMPTS) update.lockUntil = new Date(Date.now() + LOCK_DURATION_MS);
+    if (attempts >= MAX_LOGIN_ATTEMPTS) update.lockUntil = new Date(Date.now() + LOCK_DURATION_MS);
     await userRepo.updateById(user.id, update);
 
     if (req) {
-      const reason = attempts >= MAX_ATTEMPTS ? 'account_locked' : 'invalid_password';
+      const reason = attempts >= MAX_LOGIN_ATTEMPTS ? 'account_locked' : 'invalid_password';
       analytics.track(() => analytics.trackLogin(req, {
         userId: user.id, email: email || user.email, success: false, failReason: reason,
       }));
@@ -124,7 +119,6 @@ class AuthService {
   }
 
   async logout(userId, refreshToken) {
-    // Find the exact session tied to this refreshToken before removing it
     const session = await prisma.userSession.findFirst({
       where: { userId, sessionToken: refreshToken, isActive: true },
       select: { id: true },
@@ -136,13 +130,23 @@ class AuthService {
   async refreshAccessToken(refreshToken) {
     const payload = verifyToken(refreshToken, TOKEN_TYPE.REFRESH);
     const user = await userRepo.findById(payload.userId);
+
     if (!user || !user.refreshTokens.includes(refreshToken)) {
+      if (user) await userRepo.clearAllRefreshTokens(user.id);
       throw ApiError.unauthorized('Invalid refresh token.');
     }
+    if (!user.isActive) throw ApiError.forbidden(MESSAGES.ACCOUNT_INACTIVE);
 
     const { accessToken, refreshToken: newRefreshToken } = generateAuthTokens(user.id, user.role);
-    await userRepo.removeRefreshToken(user.id, refreshToken);
-    await userRepo.addRefreshToken(user.id, newRefreshToken);
+
+    // Atomic token rotation: filter old, push new in a single update
+    const updatedTokens = user.refreshTokens.filter((t) => t !== refreshToken);
+    updatedTokens.push(newRefreshToken);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { refreshTokens: { set: updatedTokens } },
+    });
+
     return { accessToken, refreshToken: newRefreshToken };
   }
 
@@ -156,8 +160,8 @@ class AuthService {
   }
 
   async forgotPassword(email) {
-    const user = await userRepo.findByEmail(email);
-    if (!user) return; // Silently succeed — don't reveal email existence
+    const user = await userRepo.findByEmail(email.toLowerCase());
+    if (!user) return; // Silent — don't reveal whether email exists
     const token = generateToken({ userId: user.id }, TOKEN_TYPE.RESET_PASSWORD);
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
     await sendEmail({
@@ -170,9 +174,7 @@ class AuthService {
 
   async resetPassword(token, newPassword) {
     const payload = verifyToken(token, TOKEN_TYPE.RESET_PASSWORD);
-    // Pass raw password — userRepo.updateById hashes it internally
     await userRepo.updateById(payload.userId, { password: newPassword });
-    // Clear all refresh tokens AND close all active sessions
     await Promise.all([
       userRepo.clearAllRefreshTokens(payload.userId),
       prisma.userSession.updateMany({
@@ -184,38 +186,41 @@ class AuthService {
   }
 
   async sendOTP(phoneOrEmail) {
-    const otp = generateOTP(parseInt(process.env.OTP_LENGTH, 10) || 6);
-    const hashed = await hashOTP(otp);
-    const expiry = new Date(Date.now() + (parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 10) * 60 * 1000);
+    const otpLength = parseInt(process.env.OTP_LENGTH, 10) || 6;
+    const otpExpiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 10;
 
-    const user = await userRepo.findByEmail(phoneOrEmail)
-      || await userRepo.findByPhone(phoneOrEmail);
+    const user = await findUserByPhoneOrEmail(phoneOrEmail);
     if (!user) throw ApiError.notFound('Account not found.');
+
+    const otp = generateOTP(otpLength);
+    const hashed = await hashOTP(otp);
+    const expiry = new Date(Date.now() + otpExpiryMinutes * 60 * 1000);
 
     await userRepo.updateById(user.id, { otp: hashed, otpExpiry: expiry, otpAttempts: 0 });
 
-    await sendEmail({ to: user.email, subject: 'Your OTP — Medical E-Commerce', template: 'otp', data: { otp, name: user.firstName } });
+    await sendEmail({
+      to: user.email,
+      subject: 'Your OTP — Medical E-Commerce',
+      template: 'otp',
+      data: { otp, name: user.firstName },
+    });
 
-    // Also send OTP via WhatsApp if user has a phone
     if (user.phone) {
-      addWhatsAppJob('sendOtpWhatsApp', user.phone, [otp, parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 10]).catch(() => {});
+      addWhatsAppJob('sendOtpWhatsApp', user.phone, [otp, otpExpiryMinutes]).catch(() => {});
     }
 
     return { message: MESSAGES.OTP_SENT };
   }
 
   async verifyOTP(phoneOrEmail, otp) {
-    const user = await userRepo.findByEmail(phoneOrEmail)
-      || await userRepo.findByPhone(phoneOrEmail);
+    const user = await findUserByPhoneOrEmail(phoneOrEmail);
     if (!user) throw ApiError.notFound('Account not found.');
 
     if (!user.otp || !user.otpExpiry || new Date() > user.otpExpiry) {
       throw ApiError.badRequest(MESSAGES.OTP_INVALID);
     }
 
-    const MAX_OTP_ATTEMPTS = 5;
     if ((user.otpAttempts || 0) >= MAX_OTP_ATTEMPTS) {
-      // Clear OTP so a fresh one must be requested
       await userRepo.updateById(user.id, { otp: null, otpExpiry: null, otpAttempts: 0 });
       throw ApiError.badRequest('Too many incorrect OTP attempts. Please request a new OTP.');
     }
@@ -230,14 +235,9 @@ class AuthService {
     return { message: MESSAGES.OTP_VERIFIED };
   }
 
-  /**
-   * Google OAuth — verify Google id_token, find-or-create user, return JWT pair.
-   * Frontend sends the id_token obtained from Google Sign-In SDK.
-   */
   async googleAuth(idToken, req) {
     const googleClient = getGoogleClient();
 
-    // Verify the token with Google
     let payload;
     try {
       const ticket = await googleClient.verifyIdToken({
@@ -250,16 +250,12 @@ class AuthService {
     }
 
     const { sub: googleId, email, given_name: firstName, family_name: lastName, picture } = payload;
-
     if (!email) throw ApiError.badRequest('Google account has no email associated.');
 
-    // Find existing user by googleId first, then fall back to email
     let user = await userRepo.findOne({ googleId }) || await userRepo.findByEmail(email);
-
     const isNewUser = !user;
 
     if (isNewUser) {
-      // New user — create with avatar object so toPrismaData maps it correctly
       user = await userRepo.create({
         firstName: firstName || 'User',
         lastName: lastName || '',
@@ -270,10 +266,7 @@ class AuthService {
         role: ROLES.USER,
       });
     } else {
-      // isActive check BEFORE doing any writes
       if (!user.isActive) throw ApiError.forbidden(MESSAGES.ACCOUNT_INACTIVE);
-
-      // Link googleId / avatar if missing
       const updates = {};
       if (!user.googleId) updates.googleId = googleId;
       if (!user.avatar && picture) updates.avatar = { url: picture };
@@ -292,13 +285,11 @@ class AuthService {
 
     if (req) {
       req.analyticsUserId = user.id;
-      // trackRegistration fire-and-forget (non-critical), trackLogin awaited for sessionId
       if (isNewUser) analytics.track(() => analytics.trackRegistration(req, user.id, email));
       const sessionId = await analytics.trackLogin(req, {
         userId: user.id, email, success: true, sessionToken: refreshToken,
       });
       req.analyticsSessionId = sessionId;
-      // Also store on res.locals so res.on('finish') in analyticsMiddleware can read it reliably
       if (sessionId && req.res) req.res.locals.analyticsSessionId = sessionId;
     }
 

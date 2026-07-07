@@ -21,7 +21,8 @@ const getProductById = asyncHandler(async (req, res) => {
 });
 
 const getFeaturedProducts = asyncHandler(async (req, res) => {
-  const products = await productService.getFeaturedProducts(parseInt(req.query.limit, 10) || 8);
+  const limit = Math.min(Math.max(1, parseInt(req.query.limit, 10) || 8), 50);
+  const products = await productService.getFeaturedProducts(limit);
   sendSuccess(res, MESSAGES.FETCHED, products);
 });
 

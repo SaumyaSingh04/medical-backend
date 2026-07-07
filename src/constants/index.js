@@ -151,12 +151,12 @@ const SORT_OPTIONS = {
 
 // ─── File Upload ──────────────────────────────────────────────────────────────
 const UPLOAD = {
-  MAX_SIZE_MB: 5,
-  MAX_SIZE_BYTES: 5 * 1024 * 1024,
-  ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/webp'],
-  MAX_PRODUCT_IMAGES: 10,
-  VIDEO_MAX_SIZE_MB: 100,
-  VIDEO_MAX_SIZE_BYTES: 100 * 1024 * 1024,
+  MAX_SIZE_MB:              5,
+  get MAX_SIZE_BYTES()      { return this.MAX_SIZE_MB * 1024 * 1024; },
+  ALLOWED_MIME_TYPES:       ['image/jpeg', 'image/png', 'image/webp'],
+  MAX_PRODUCT_IMAGES:       10,
+  VIDEO_MAX_SIZE_MB:        100,
+  get VIDEO_MAX_SIZE_BYTES(){ return this.VIDEO_MAX_SIZE_MB * 1024 * 1024; },
   ALLOWED_VIDEO_MIME_TYPES: ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'],
 };
 

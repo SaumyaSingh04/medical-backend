@@ -2,34 +2,9 @@
 
 const crypto = require('crypto');
 
-// ─── Razorpay signature verify (commented out — only COD active) ────────────────
-// const verifyRazorpaySignature = (orderId, paymentId, signature) => {
-//   const secret = process.env.RAZORPAY_KEY_SECRET;
-//   const body = `${orderId}|${paymentId}`;
-//   const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
-//   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-// };
+const generateSecureToken = (bytes = 32) => crypto.randomBytes(bytes).toString('hex');
 
-// ─── Stripe webhook verify (commented out — only COD active) ─────────────────────
-// const verifyStripeWebhook = (rawBody, signature) => {
-//   const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-//   return stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
-// };
+const hmacSHA256 = (data, secret) =>
+  crypto.createHmac('sha256', secret).update(data).digest('hex');
 
-/**
- * Generate a secure random hex token
- * @param {number} bytes - Number of random bytes (default 32)
- */
-const generateSecureToken = (bytes = 32) => {
-  return crypto.randomBytes(bytes).toString('hex');
-};
-
-/**
- * Compute HMAC-SHA256 hash
- */
-const hmacSHA256 = (data, secret) => {
-  return crypto.createHmac('sha256', secret).update(data).digest('hex');
-};
-
-// module.exports = { verifyRazorpaySignature, verifyStripeWebhook, generateSecureToken, hmacSHA256 };
 module.exports = { generateSecureToken, hmacSHA256 };

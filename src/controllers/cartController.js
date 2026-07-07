@@ -35,4 +35,9 @@ const applyCoupon = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Coupon applied.', { cart: result.cart, discountAmount: result.discount });
 });
 
-module.exports = { getCart, addItem, updateItem, removeItem, clearCart, applyCoupon };
+const removeCoupon = asyncHandler(async (req, res) => {
+  const cart = await cartService.removeCoupon(req.user.id);
+  sendSuccess(res, 'Coupon removed.', cart);
+});
+
+module.exports = { getCart, addItem, updateItem, removeItem, clearCart, applyCoupon, removeCoupon };

@@ -2,9 +2,9 @@
 
 const { createTransporter } = require('../config/mailer');
 const logger = require('./logger');
-const path = require('path');
 
-// Simple inline HTML email templates
+const OTP_EXPIRY = process.env.OTP_EXPIRY_MINUTES || 10;
+
 const templates = {
   emailVerification: ({ name, verifyUrl }) => ({
     subject: 'Verify Your Email — Medical E-Commerce',
@@ -32,7 +32,7 @@ const templates = {
       <h2 style="color:#2d3748;">Your OTP</h2>
       <p>Hi ${name}, use the following OTP to verify your account:</p>
       <div style="font-size:36px;font-weight:bold;color:#4CAF50;letter-spacing:8px;padding:16px;text-align:center;">${otp}</div>
-      <p style="color:#888;font-size:12px;">OTP expires in ${process.env.OTP_EXPIRY_MINUTES || 10} minutes.</p>
+      <p style="color:#888;font-size:12px;">OTP expires in ${OTP_EXPIRY} minutes.</p>
     </div>`,
   }),
 
@@ -47,37 +47,31 @@ const templates = {
   }),
 };
 
+const isSmtpConfigured = () => {
+  const u = process.env.SMTP_USER;
+  const p = process.env.SMTP_PASS;
+  return u && !u.includes('your_') && p && !p.includes('your_');
+};
+
 /**
- * Send an email using a template or raw options
- * @param {object} options - { to, subject, html, template, data }
+ * Send an email using a named template or raw html/subject.
+ * @param {{ to: string, subject?: string, html?: string, template?: string, data?: object }} options
  */
 const sendEmail = async ({ to, subject, html, template, data = {} }) => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-  if (!smtpUser || smtpUser.includes('your_') || !smtpPass || smtpPass.includes('your_')) {
+  if (!isSmtpConfigured()) {
     logger.warn(`[Mailer] SMTP not configured — skipping email to ${to}`);
     return;
   }
 
   try {
-    const transporter = createTransporter();
-    let finalSubject = subject;
-    let finalHtml = html;
-
-    if (template && templates[template]) {
-      const rendered = templates[template](data);
-      finalSubject = rendered.subject;
-      finalHtml = rendered.html;
-    }
-
-    await transporter.sendMail({
+    const rendered = template && templates[template] ? templates[template](data) : null;
+    await createTransporter().sendMail({
       from: process.env.EMAIL_FROM || 'Medical E-Commerce <noreply@medical-ecommerce.com>',
       to,
-      subject: finalSubject,
-      html: finalHtml,
+      subject: rendered?.subject ?? subject,
+      html:    rendered?.html    ?? html,
     });
-
-    logger.info(`Email sent to ${to}: ${finalSubject}`);
+    logger.info(`Email sent to ${to}: ${rendered?.subject ?? subject}`);
   } catch (err) {
     logger.error(`Failed to send email to ${to}:`, err.message);
     // Don't throw — email failures shouldn't break request flow

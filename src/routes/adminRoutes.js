@@ -2,13 +2,25 @@
 
 const express = require('express');
 const router = express.Router();
-const ctrl = require('../controllers/adminController');
-const { authenticate } = require('../middleware/auth');
-const { authorize } = require('../middleware/authorize');
-const { validate } = require('../middleware/validate');
-const { auditLog } = require('../middleware/auditLog');
-const { ROLES } = require('../constants');
-const ApiError = require('../helpers/ApiError');
+const ctrl          = require('../controllers/adminController');
+const auditLogCtrl  = require('../controllers/auditLogController');
+const exportCtrl    = require('../controllers/exportController');
+const contactCtrl   = require('../controllers/contactController');
+const notifCtrl     = require('../controllers/notificationController');
+const { authenticate }      = require('../middleware/auth');
+const { authorize }         = require('../middleware/authorize');
+const { validate }          = require('../middleware/validate');
+const { auditLog }          = require('../middleware/auditLog');
+const { ROLES }             = require('../constants');
+const ApiError              = require('../helpers/ApiError');
+const contactValidation     = require('../validations/contactValidation');
+
+const guardSuperAdminRole = (req, res, next) => {
+  if (req.body.role === ROLES.SUPER_ADMIN && req.user.role !== ROLES.SUPER_ADMIN) {
+    return next(ApiError.forbidden('Only super_admin can assign the super_admin role.'));
+  }
+  next();
+};
 
 const isSuperAdmin = authorize(ROLES.SUPER_ADMIN);
 const isAdmin      = authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN);
@@ -388,17 +400,7 @@ router.patch('/users/:id/status', isSuperAdmin, auditLog('toggle_status', 'User'
  *       403: { description: Forbidden — Super Admin only }
  *       404: { description: User not found }
  */
-router.patch('/users/:id/role',
-  isSuperAdmin,
-  (req, res, next) => {
-    if (req.body.role === ROLES.SUPER_ADMIN && req.user.role !== ROLES.SUPER_ADMIN) {
-      return next(ApiError.forbidden('Only super_admin can assign the super_admin role.'));
-    }
-    next();
-  },
-  auditLog('update_role', 'User'),
-  ctrl.updateUserRole
-);
+router.patch('/users/:id/role', isSuperAdmin, guardSuperAdminRole, auditLog('update_role', 'User'), ctrl.updateUserRole);
 
 /**
  * @swagger
@@ -450,7 +452,6 @@ router.patch('/users/:id/role',
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-const auditLogCtrl = require('../controllers/auditLogController');
 router.get('/audit-logs', isSuperAdmin, auditLogCtrl.getLogs);
 
 /**
@@ -480,7 +481,6 @@ router.get('/audit-logs', isSuperAdmin, auditLogCtrl.getLogs);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-const exportCtrl = require('../controllers/exportController');
 router.get('/export/orders',   isSuperAdmin, exportCtrl.exportOrders);
 
 /**
@@ -793,8 +793,6 @@ router.get('/customers', isAdmin, ctrl.listCustomers);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Admin only }
  */
-const contactCtrl       = require('../controllers/contactController');
-const contactValidation = require('../validations/contactValidation');
 router.get('/contacts',              isAdmin, contactCtrl.listContacts);
 
 /**
@@ -864,7 +862,6 @@ router.patch('/contacts/:id/status', isAdmin, validate(contactValidation.updateS
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Admin only }
  */
-const notifCtrl = require('../controllers/notificationController');
 router.post('/notifications/broadcast', isAdmin, auditLog('broadcast', 'Notification'), notifCtrl.broadcastNotification);
 
 module.exports = router;

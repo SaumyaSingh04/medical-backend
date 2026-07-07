@@ -6,25 +6,22 @@ const logger = require('../utils/logger');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
+  api_key:    process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
+  secure:     true,
 });
 
 logger.info('✅ Cloudinary configured.');
 
-/**
- * Returns multer memory storage; actual upload to Cloudinary happens via uploadBuffer
- */
-const createCloudinaryStorage = () => multer.memoryStorage();
+// Multer memory storage — actual upload happens via uploadBuffer
+const cloudinaryStorage = multer.memoryStorage();
 
 /**
  * Delete a Cloudinary resource by public_id
  */
 const deleteCloudinaryResource = async (publicId, resourceType = 'image') => {
   try {
-    const result = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
-    return result;
+    return await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
   } catch (err) {
     logger.error('Cloudinary delete error:', err.message);
     throw err;
@@ -34,21 +31,18 @@ const deleteCloudinaryResource = async (publicId, resourceType = 'image') => {
 /**
  * Upload a buffer directly to Cloudinary
  */
-const uploadBuffer = (buffer, folder, options = {}) => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        folder: `${process.env.CLOUDINARY_FOLDER || 'medical-ecommerce'}/${folder}`,
-        resource_type: 'auto',
-        ...options,
-      },
-      (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      }
-    );
-    uploadStream.end(buffer);
+const uploadBuffer = (buffer, folder, options = {}) =>
+  new Promise((resolve, reject) => {
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder: `${process.env.CLOUDINARY_FOLDER || 'medical-ecommerce'}/${folder}`,
+          resource_type: 'auto',
+          ...options,
+        },
+        (err, result) => (err ? reject(err) : resolve(result))
+      )
+      .end(buffer);
   });
-};
 
-module.exports = { cloudinary, createCloudinaryStorage, deleteCloudinaryResource, uploadBuffer };
+module.exports = { cloudinary, cloudinaryStorage, deleteCloudinaryResource, uploadBuffer };

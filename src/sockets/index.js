@@ -8,10 +8,14 @@ const { orderSocket } = require('./orderSocket');
 
 let io = null;
 
+const extractToken = (socket) =>
+  socket.handshake.auth?.token ||
+  socket.handshake.headers?.authorization?.split(' ')[1];
+
 const initializeSockets = (server) => {
   io = new Server(server, {
     cors: {
-      origin: (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map(o => o.trim()),
+      origin: (process.env.CORS_ORIGIN || 'http://localhost:3000').split(',').map((o) => o.trim()),
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -19,32 +23,26 @@ const initializeSockets = (server) => {
     pingInterval: 25000,
   });
 
-  // JWT Authentication middleware for Socket.IO
   io.use((socket, next) => {
     try {
-      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
+      const token = extractToken(socket);
       if (!token) return next(new Error('Authentication required.'));
       const payload = verifyToken(token, TOKEN_TYPE.ACCESS);
       socket.userId = payload.userId;
-      socket.role = payload.role;
+      socket.role   = payload.role;
       next();
     } catch (err) {
-      logger.warn('Socket auth failed:', err.message);
+      logger.warn('Socket auth failed', { error: err.message });
       next(new Error('Invalid token.'));
     }
   });
 
   io.on('connection', (socket) => {
-    logger.info(`Socket connected: ${socket.id} (user: ${socket.userId})`);
-
-    // Join user-specific room for private notifications
+    logger.debug(`Socket connected: ${socket.id}`, { userId: socket.userId });
     socket.join(`user:${socket.userId}`);
-
-    // Register order events
     orderSocket(io, socket);
-
     socket.on('disconnect', (reason) => {
-      logger.info(`Socket disconnected: ${socket.id} — ${reason}`);
+      logger.debug(`Socket disconnected: ${socket.id}`, { reason, userId: socket.userId });
     });
   });
 

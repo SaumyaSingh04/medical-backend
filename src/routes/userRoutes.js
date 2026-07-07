@@ -4,12 +4,9 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/userController');
 const { authenticate } = require('../middleware/auth');
-const { authorize } = require('../middleware/authorize');
 const { validate } = require('../middleware/validate');
 const { avatarUpload, handleMulterError } = require('../middleware/upload');
 const v = require('../validations/userValidation');
-const { cache } = require('../middleware/cache');
-const { CACHE_TTL } = require('../constants');
 
 // All user routes require authentication
 router.use(authenticate);

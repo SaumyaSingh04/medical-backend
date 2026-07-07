@@ -7,6 +7,8 @@ const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/auth');
 const { authLimiter, otpLimiter } = require('../middleware/rateLimiter');
 const v = require('../validations/authValidation');
+const Joi = require('joi');
+const verifyEmailQuery = Joi.object({ token: Joi.string().required() });
 
 /**
  * @swagger
@@ -234,7 +236,7 @@ router.post('/logout', authenticate, ctrl.logout);
  *                 timestamp: { type: string, format: date-time }
  *       401: { description: Invalid or expired refresh token }
  */
-router.post('/refresh-token', ctrl.refreshToken);
+router.post('/refresh-token', validate(v.refreshToken), ctrl.refreshToken);
 
 /**
  * @swagger
@@ -263,7 +265,7 @@ router.post('/refresh-token', ctrl.refreshToken);
  *                 timestamp: { type: string, format: date-time }
  *       400: { description: Invalid or expired token }
  */
-router.get('/verify-email', ctrl.verifyEmail);
+router.get('/verify-email', validate(verifyEmailQuery, 'query'), ctrl.verifyEmail);
 
 /**
  * @swagger
@@ -407,7 +409,7 @@ router.post('/send-otp', otpLimiter, validate(v.sendOTP), ctrl.sendOTP);
  *       400: { description: Invalid or expired OTP }
  *       404: { description: Account not found }
  */
-router.post('/verify-otp', validate(v.verifyOTP), ctrl.verifyOTP);
+router.post('/verify-otp', otpLimiter, validate(v.verifyOTP), ctrl.verifyOTP);
 
 /**
  * @swagger

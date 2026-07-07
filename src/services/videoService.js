@@ -1,10 +1,10 @@
 'use strict';
 
 const videoRepo = require('../repositories/videoRepo');
-const cartService = require('./cartService');
 const ApiError = require('../helpers/ApiError');
 const { deleteCloudinaryResource } = require('../config/cloudinary');
 const { MESSAGES } = require('../constants');
+const cartService = require('./cartService');
 
 const getActiveVideos = () => videoRepo.findAll({ isActive: true });
 
@@ -105,7 +105,6 @@ const reorderVideos = async (items) => {
   return videoRepo.reorder(items);
 };
 
-// Video section se product ko cart mein add karo
 const addVideoProductToCart = async (videoId, userId, { variantId, quantity = 1 } = {}) => {
   const video = await videoRepo.findById(videoId);
   if (!video) throw ApiError.notFound(MESSAGES.VIDEO_NOT_FOUND);

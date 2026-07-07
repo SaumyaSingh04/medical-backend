@@ -4,12 +4,14 @@ const authService = require('../services/authService');
 const { sendSuccess } = require('../helpers/ApiResponse');
 const { HTTP_STATUS, MESSAGES } = require('../constants');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../helpers/ApiError');
 
 const refreshCookieOptions = () => ({
   httpOnly: true,
-  secure: process.env.COOKIE_SECURE === 'true',
-  sameSite: process.env.COOKIE_SAME_SITE || 'lax',
+  secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
+  sameSite: process.env.COOKIE_SAME_SITE || 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: '/api/v1/auth',
 });
 
 const login = asyncHandler(async (req, res) => {
@@ -21,13 +23,13 @@ const login = asyncHandler(async (req, res) => {
 const logout = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
   await authService.logout(req.user.id, refreshToken);
-  res.clearCookie('refreshToken');
+  res.clearCookie('refreshToken', { path: '/api/v1/auth' });
   sendSuccess(res, MESSAGES.LOGOUT_SUCCESS);
 });
 
 const refreshToken = asyncHandler(async (req, res) => {
   const token = req.cookies?.refreshToken || req.body?.refreshToken;
-  if (!token) return res.status(HTTP_STATUS.UNAUTHORIZED).json({ success: false, message: 'Refresh token required.' });
+  if (!token) throw ApiError.unauthorized('Refresh token required.');
   const result = await authService.refreshAccessToken(token);
   res.cookie('refreshToken', result.refreshToken, refreshCookieOptions());
   sendSuccess(res, MESSAGES.TOKEN_REFRESHED, { accessToken: result.accessToken });
@@ -50,7 +52,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
 
 const resetPassword = asyncHandler(async (req, res) => {
   const result = await authService.resetPassword(req.body.token, req.body.password);
-  res.clearCookie('refreshToken');
+  res.clearCookie('refreshToken', { path: '/api/v1/auth' });
   sendSuccess(res, result.message);
 });
 
@@ -66,12 +68,12 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
 const googleAuth = asyncHandler(async (req, res) => {
   const { idToken } = req.body;
-  if (!idToken) return res.status(HTTP_STATUS.BAD_REQUEST).json({ success: false, message: 'idToken is required.' });
+  if (!idToken) throw ApiError.badRequest('idToken is required.');
   const { accessToken, refreshToken, user, isNewUser } = await authService.googleAuth(idToken, req);
   res.cookie('refreshToken', refreshToken, refreshCookieOptions());
   sendSuccess(
     res,
-    isNewUser ? 'Account created via Google.' : 'Google login successful.',
+    isNewUser ? MESSAGES.GOOGLE_ACCOUNT_CREATED : MESSAGES.GOOGLE_AUTH_SUCCESS,
     { accessToken, user, isNewUser },
     isNewUser ? HTTP_STATUS.CREATED : HTTP_STATUS.OK,
   );

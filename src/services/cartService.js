@@ -3,6 +3,7 @@
 const { cartRepo } = require('../repositories');
 const productRepo = require('../repositories/productRepo');
 const { couponRepo } = require('../repositories');
+const prisma = require('../repositories/prismaClient');
 const ApiError = require('../helpers/ApiError');
 const { MESSAGES } = require('../constants');
 
@@ -26,13 +27,11 @@ class CartService {
     let stock = product.stock;
 
     if (variantId) {
-      // variants is Json[] — use .find() not Mongoose .id()
       const variant = (product.variants || []).find((v) => v.id === variantId || v._id === variantId);
       if (!variant || variant.isActive === false) throw ApiError.notFound('Variant not found.');
       price = Number(variant.price);
       compareAtPrice = variant.compareAtPrice != null ? Number(variant.compareAtPrice) : null;
       stock = variant.stock ?? 0;
-      // attributes may be flat on variant or nested under attributes{}
       variantDetails = {
         name: variant.name ?? null,
         sku: variant.sku ?? null,
@@ -64,7 +63,6 @@ class CartService {
         compareAtPrice,
         name: product.name,
         slug: product.slug,
-        // productRepo.toMongo maps thumbnailUrl → thumbnail: { url, publicId }
         thumbnail: product.thumbnail?.url ?? product.thumbnailUrl ?? product.images?.[0]?.url ?? null,
       });
     }
@@ -109,7 +107,20 @@ class CartService {
   }
 
   async clearCart(userId) {
-    return cartRepo.upsertCart(userId, { items: [], couponCode: null, couponDiscount: 0 });
+    const cart = await cartRepo.findByUser(userId);
+    if (!cart) return;
+    // Run both writes in a transaction to keep them atomic.
+    await prisma.$transaction([
+      prisma.cartItem.deleteMany({ where: { cartId: cart.id } }),
+      prisma.cart.update({ where: { userId }, data: { couponCode: null, couponDiscount: 0 } }),
+    ]);
+  }
+
+  async removeCoupon(userId) {
+    const cart = await cartRepo.findByUser(userId);
+    if (!cart) throw ApiError.notFound('Cart not found.');
+    await cartRepo.setCoupon(userId, null, 0);
+    return cartRepo.findByUser(userId);
   }
 
   async applyCoupon(userId, code) {

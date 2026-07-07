@@ -11,15 +11,19 @@ const ApiError = require('../helpers/ApiError');
 
 const MAX_EXPORT_ROWS = 5000;
 
+function buildDateFilter(from, to, field = 'createdAt') {
+  if (!from && !to) return {};
+  return {
+    [field]: {
+      ...(from && { gte: new Date(from) }),
+      ...(to   && { lte: new Date(to + 'T23:59:59.999Z') }),
+    },
+  };
+}
+
 class ExportService {
   async getOrderRows({ from, to, status } = {}) {
-    const where = {};
-    if (status) where.status = status;
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to + 'T23:59:59.999Z');
-    }
+    const where = { ...buildDateFilter(from, to), ...(status && { status }) };
 
     const orders = await prisma.order.findMany({
       where,
@@ -59,13 +63,7 @@ class ExportService {
   }
 
   async getUserRows({ role, from, to } = {}) {
-    const where = {};
-    if (role) where.role = role;
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to + 'T23:59:59.999Z');
-    }
+    const where = { ...buildDateFilter(from, to), ...(role && { role }) };
 
     const users = await prisma.user.findMany({
       where,
@@ -121,14 +119,7 @@ class ExportService {
   }
 
   async getLeadRows({ status, source, from, to } = {}) {
-    const where = { isDeleted: false };
-    if (status) where.status = status;
-    if (source) where.source = source;
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to)   where.createdAt.lte = new Date(to + 'T23:59:59.999Z');
-    }
+    const where = { isDeleted: false, ...buildDateFilter(from, to), ...(status && { status }), ...(source && { source }) };
 
     const leads = await prisma.lead.findMany({
       where,

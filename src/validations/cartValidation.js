@@ -1,11 +1,12 @@
 'use strict';
 
 const Joi = require('joi');
+const { id, quantity } = require('./common');
 
 const addToCart = Joi.object({
-  productId: Joi.string().uuid().required(),
-  variantId: Joi.string().uuid().optional(),
-  quantity: Joi.number().integer().min(1).max(100).required(),
+  productId: id().required(),
+  variantId: id().optional(),
+  quantity:  quantity().required(),
 });
 
 const updateCartItem = Joi.object({
@@ -16,10 +17,10 @@ const applyCoupon = Joi.object({
   code: Joi.string().uppercase().trim().required(),
 });
 
-// Video section se add-to-cart: productId video se aata hai, variantId + quantity optional
+// productId comes from the video — only variantId + quantity are accepted from the body
 const addToCartFromVideo = Joi.object({
-  variantId: Joi.string().uuid().optional(),
-  quantity: Joi.number().integer().min(1).max(100).default(1),
+  variantId: id().optional(),
+  quantity:  quantity().default(1),
 });
 
 module.exports = { addToCart, updateCartItem, applyCoupon, addToCartFromVideo };

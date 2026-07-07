@@ -3,30 +3,18 @@
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = global.__prisma ?? new PrismaClient({
-  datasources: {
-    db: { url: process.env.DATABASE_URL },
-  },
-  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+  log: process.env.NODE_ENV === 'development'
+    ? [{ emit: 'event', level: 'query' }, { emit: 'stdout', level: 'error' }, { emit: 'stdout', level: 'warn' }]
+    : [{ emit: 'stdout', level: 'error' }],
 });
 
-if (process.env.NODE_ENV !== 'production') global.__prisma = prisma;
-
-// Handle Neon / any PostgreSQL idle connection termination gracefully.
-// When the DB kills the connection (E57P01 / ECONNRESET), Prisma emits this
-// internal event. We catch it so it never surfaces as an unhandled rejection.
-prisma.$on('error', () => {});
-
-process.on('unhandledRejection', (reason) => {
-  const msg = reason?.message || String(reason);
-  // Suppress Neon idle-timeout disconnects — Prisma reconnects automatically
-  if (
-    msg.includes('E57P01') ||
-    msg.includes('terminating connection due to administrator command') ||
-    msg.includes('Connection is closed') ||
-    msg.includes('ECONNRESET')
-  ) return;
-  // Re-throw everything else so real errors are still visible
-  console.error('[unhandledRejection]', reason);
-});
+if (process.env.NODE_ENV === 'development') {
+  global.__prisma = prisma;
+  if (process.env.LOG_QUERIES === 'true') {
+    // Top-level require — fixes lazy-load finding; logger is always available in dev.
+    const logger = require('../utils/logger');
+    prisma.$on('query', (e) => logger.debug(`Prisma (${e.duration}ms): ${e.query}`));
+  }
+}
 
 module.exports = prisma;

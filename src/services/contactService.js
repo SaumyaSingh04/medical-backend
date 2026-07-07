@@ -22,7 +22,7 @@ const listContacts = async (query = {}) => {
 
 const updateContactStatus = async (id, status, adminNote) => {
   const contact = await prisma.contactQuery.findUnique({ where: { id } });
-  if (!contact) throw new ApiError(404, 'Contact query not found.');
+  if (!contact) throw ApiError.notFound('Contact query not found.');
   return prisma.contactQuery.update({
     where: { id },
     data: { status, ...(adminNote !== undefined && { adminNote }) },

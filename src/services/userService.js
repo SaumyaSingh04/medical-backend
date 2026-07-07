@@ -1,8 +1,19 @@
 'use strict';
 
 const userRepo = require('../repositories/userRepo');
+const productRepo = require('../repositories/productRepo');
+const orderRepo = require('../repositories/orderRepo');
 const { deleteCloudinaryResource } = require('../config/cloudinary');
 const ApiError = require('../helpers/ApiError');
+const { ORDER_STATUS } = require('../constants');
+
+const ACTIVE_ORDER_STATUSES = new Set([
+  ORDER_STATUS.PENDING,
+  ORDER_STATUS.CONFIRMED,
+  ORDER_STATUS.PROCESSING,
+  ORDER_STATUS.SHIPPED,
+  ORDER_STATUS.OUT_FOR_DELIVERY,
+]);
 
 class UserService {
   async getProfile(userId) {
@@ -12,23 +23,19 @@ class UserService {
   }
 
   async updateProfile(userId, updateData) {
-    const { firstName, lastName, phone, password } = updateData;
-    // Email change is intentionally excluded — it requires a dedicated
-    // verify-new-email flow to prevent account takeover.
-    const updateObj = { firstName, lastName, phone };
+    const { firstName, lastName, phone, password, currentPassword } = updateData;
 
-    // Hash password if provided
     if (password) {
-      const bcrypt = require('bcryptjs');
-      const salt = await bcrypt.genSalt(12);
-      updateObj.password = await bcrypt.hash(password, salt);
+      const user = await userRepo.findById(userId);
+      if (!user) throw ApiError.notFound('User not found.');
+      if (!user.password) throw ApiError.badRequest('Password change not allowed for Google-only accounts.');
+      const isMatch = await user.comparePassword(currentPassword || '');
+      if (!isMatch) throw ApiError.unauthorized('Current password is incorrect.');
     }
 
-    // Clean up undefined fields
-    Object.keys(updateObj).forEach(key => {
-      if (updateObj[key] === undefined) delete updateObj[key];
-    });
-
+    const updateObj = Object.fromEntries(
+      Object.entries({ firstName, lastName, phone, password }).filter(([, v]) => v !== undefined)
+    );
     const user = await userRepo.updateById(userId, updateObj);
     if (!user) throw ApiError.notFound('User not found.');
     return user.toPublicJSON ? user.toPublicJSON() : user;
@@ -37,16 +44,8 @@ class UserService {
   async uploadAvatar(userId, file) {
     const user = await userRepo.findById(userId);
     if (!user) throw ApiError.notFound('User not found.');
-
-    // Delete old avatar
-    if (user.avatar && user.avatar.publicId) {
-      await deleteCloudinaryResource(user.avatar.publicId).catch(() => {});
-    }
-
-    const updated = await userRepo.updateById(userId, {
-      avatar: { url: file.path, publicId: file.filename },
-    }, { new: true });
-    return updated;
+    if (user.avatar?.publicId) await deleteCloudinaryResource(user.avatar.publicId).catch(() => {});
+    return userRepo.updateById(userId, { avatar: { url: file.path, publicId: file.filename } });
   }
 
   async getAddresses(userId) {
@@ -84,18 +83,23 @@ class UserService {
   }
 
   async toggleWishlist(userId, productId) {
-    const prisma = require('../repositories/prismaClient');
-    const product = await prisma.product.findUnique({ where: { id: productId }, select: { id: true } });
+    const product = await productRepo.findById(productId);
     if (!product) throw ApiError.notFound('Product not found.');
 
-    const isWishlisted = await userRepo.isInWishlist(userId, productId);
+    const wishlist = await userRepo.getWishlist(userId);
+    const pid = String(productId);
+    const isWishlisted = wishlist?.items?.some((item) => String(item.productId) === pid) ?? false;
+
     if (isWishlisted) {
-      await userRepo.removeFromWishlist(userId, productId);
+      const filtered = (wishlist.items || [])
+        .filter((item) => String(item.productId) !== pid)
+        .map((item) => ({ productId: String(item.productId), addedAt: item.addedAt }));
+      await userRepo.updateWishlistItems(userId, filtered);
       return { wishlisted: false, productId };
-    } else {
-      await userRepo.addToWishlist(userId, productId);
-      return { wishlisted: true, productId };
     }
+
+    await userRepo.addToWishlist(userId, productId);
+    return { wishlisted: true, productId };
   }
 
   async removeFromWishlist(userId, productId) {
@@ -109,42 +113,18 @@ class UserService {
   }
 
   async getDashboard(userId) {
-    const prisma = require('../repositories/prismaClient');
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
     const [profile, ordersByStatus, recentOrders, monthlySpend] = await Promise.all([
       userRepo.findById(userId),
-      prisma.order.groupBy({
-        by: ['status'],
-        _count: { id: true },
-        where: { userId },
-      }),
-      prisma.order.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-        select: {
-          id: true, orderNumber: true, status: true,
-          totalAmount: true, createdAt: true,
-          items: { select: { name: true, quantity: true, thumbnail: true }, take: 1 },
-        },
-      }),
-      prisma.order.aggregate({
-        _sum: { totalAmount: true },
-        where: {
-          userId,
-          createdAt: { gte: monthStart },
-          status: { notIn: ['cancelled', 'failed'] },
-        },
-      }),
+      orderRepo.getStatusGroupByUser(userId),
+      orderRepo.getRecentByUser(userId, 5),
+      orderRepo.getMonthlySpend(userId, monthStart),
     ]);
 
-    const totalOrders   = ordersByStatus.reduce((s, r) => s + r._count.id, 0);
-    const activeOrders  = ordersByStatus
-      .filter(r => ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery'].includes(r.status))
-      .reduce((s, r) => s + r._count.id, 0);
-    const deliveredOrders = ordersByStatus.find(r => r.status === 'delivered')?._count.id || 0;
+    const totalOrders     = ordersByStatus.reduce((s, r) => s + r.count, 0);
+    const activeOrders    = ordersByStatus.filter((r) => ACTIVE_ORDER_STATUSES.has(r.status)).reduce((s, r) => s + r.count, 0);
+    const deliveredOrders = ordersByStatus.find((r) => r.status === ORDER_STATUS.DELIVERED)?.count || 0;
 
     return {
       profile: {
@@ -157,9 +137,9 @@ class UserService {
         total:     totalOrders,
         active:    activeOrders,
         delivered: deliveredOrders,
-        byStatus:  ordersByStatus.map(r => ({ status: r.status, count: r._count.id })),
+        byStatus:  ordersByStatus,
       },
-      monthlySpend: Number(monthlySpend._sum.totalAmount || 0),
+      monthlySpend,
       recentOrders,
     };
   }

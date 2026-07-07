@@ -4,78 +4,61 @@ const jwt = require('jsonwebtoken');
 const ApiError = require('./ApiError');
 const { TOKEN_TYPE } = require('../constants');
 
-const getSecret = (type) => ({
-  [TOKEN_TYPE.ACCESS]:         process.env.JWT_ACCESS_SECRET,
-  [TOKEN_TYPE.REFRESH]:        process.env.JWT_REFRESH_SECRET,
-  [TOKEN_TYPE.RESET_PASSWORD]: process.env.JWT_RESET_PASSWORD_SECRET,
-  [TOKEN_TYPE.EMAIL_VERIFY]:   process.env.JWT_EMAIL_VERIFY_SECRET,
-})[type];
+const JWT_OPTIONS = {
+  issuer:   'medical-ecommerce',
+  audience: 'medical-client',
+};
 
-const getExpiry = (type) => ({
-  [TOKEN_TYPE.ACCESS]:         process.env.JWT_ACCESS_EXPIRES_IN         || '15m',
-  [TOKEN_TYPE.REFRESH]:        process.env.JWT_REFRESH_EXPIRES_IN        || '7d',
-  [TOKEN_TYPE.RESET_PASSWORD]: process.env.JWT_RESET_PASSWORD_EXPIRES_IN || '10m',
-  [TOKEN_TYPE.EMAIL_VERIFY]:   process.env.JWT_EMAIL_VERIFY_EXPIRES_IN   || '24h',
-})[type];
+// Built once at module load — no per-call object reconstruction
+const SECRETS = {
+  [TOKEN_TYPE.ACCESS]:         () => process.env.JWT_ACCESS_SECRET,
+  [TOKEN_TYPE.REFRESH]:        () => process.env.JWT_REFRESH_SECRET,
+  [TOKEN_TYPE.RESET_PASSWORD]: () => process.env.JWT_RESET_PASSWORD_SECRET,
+  [TOKEN_TYPE.EMAIL_VERIFY]:   () => process.env.JWT_EMAIL_VERIFY_SECRET,
+};
 
-/**
- * Generate a JWT token
- * @param {object} payload - Token payload
- * @param {string} type - Token type (from TOKEN_TYPE)
- * @returns {string} signed JWT
- */
-const generateToken = (payload, type = TOKEN_TYPE.ACCESS) => {
-  const secret = getSecret(type);
+const EXPIRIES = {
+  [TOKEN_TYPE.ACCESS]:         () => process.env.JWT_ACCESS_EXPIRES_IN         || '15m',
+  [TOKEN_TYPE.REFRESH]:        () => process.env.JWT_REFRESH_EXPIRES_IN        || '7d',
+  [TOKEN_TYPE.RESET_PASSWORD]: () => process.env.JWT_RESET_PASSWORD_EXPIRES_IN || '10m',
+  [TOKEN_TYPE.EMAIL_VERIFY]:   () => process.env.JWT_EMAIL_VERIFY_EXPIRES_IN   || '24h',
+};
+
+const getSecret = (type) => {
+  const fn = SECRETS[type];
+  if (!fn) throw ApiError.internal(`Unknown token type: ${type}`);
+  const secret = fn();
   if (!secret) throw ApiError.internal(`No secret configured for token type: ${type}`);
+  return secret;
+};
 
-  return jwt.sign({ ...payload, tokenType: type }, secret, {
-    expiresIn: getExpiry(type),
-    issuer: 'medical-ecommerce',
-    audience: 'medical-client',
+const generateToken = (payload, type = TOKEN_TYPE.ACCESS) => {
+  return jwt.sign({ ...payload, tokenType: type }, getSecret(type), {
+    ...JWT_OPTIONS,
+    expiresIn: EXPIRIES[type](),
   });
 };
 
-/**
- * Verify and decode a JWT token
- * @param {string} token - JWT string
- * @param {string} type - Token type (from TOKEN_TYPE)
- * @returns {object} Decoded payload
- */
 const verifyToken = (token, type = TOKEN_TYPE.ACCESS) => {
-  const secret = getSecret(type);
-  if (!secret) throw ApiError.internal(`No secret configured for token type: ${type}`);
-
   try {
-    return jwt.verify(token, secret, {
-      issuer: 'medical-ecommerce',
-      audience: 'medical-client',
-    });
+    return jwt.verify(token, getSecret(type), JWT_OPTIONS);
   } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      throw ApiError.unauthorized('Token expired. Please log in again.');
-    }
-    if (err.name === 'JsonWebTokenError') {
-      throw ApiError.unauthorized('Invalid token.');
-    }
+    if (err.name === 'TokenExpiredError')  throw ApiError.unauthorized('Token expired. Please log in again.');
+    if (err.name === 'JsonWebTokenError')  throw ApiError.unauthorized('Invalid token.');
     throw ApiError.unauthorized('Token verification failed.');
   }
 };
 
-/**
- * Generate access + refresh token pair
- */
 const generateAuthTokens = (userId, role) => {
   const payload = { userId, role };
-  const accessToken = generateToken(payload, TOKEN_TYPE.ACCESS);
-  const refreshToken = generateToken(payload, TOKEN_TYPE.REFRESH);
-  return { accessToken, refreshToken };
+  return {
+    accessToken:  generateToken(payload, TOKEN_TYPE.ACCESS),
+    refreshToken: generateToken(payload, TOKEN_TYPE.REFRESH),
+  };
 };
 
-/**
- * Extract raw token from Authorization header
- */
 const extractBearerToken = (authHeader) => {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  if (!authHeader?.startsWith('Bearer ')) return null;
   return authHeader.split(' ')[1];
 };
 

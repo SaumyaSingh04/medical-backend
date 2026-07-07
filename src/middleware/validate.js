@@ -10,21 +10,21 @@ const { MESSAGES } = require('../constants');
  */
 const validate = (schema, source = 'body') => {
   return (req, res, next) => {
-    // Respect schema-level unknown() preference; only strip at middleware level for body
     const { error, value } = schema.validate(req[source], {
       abortEarly: false,
       stripUnknown: source === 'body',
+      convert: true,
     });
 
     if (error) {
       const errors = error.details.map((d) => ({
         field: d.path.join('.'),
-        message: d.message.replace(/['"]/g, ''),
+        // Strip quotes but never expose internal schema details
+        message: d.message.replace(/['"]([^'"]*)['"]/, '$1'),
       }));
       return next(ApiError.badRequest(MESSAGES.VALIDATION_ERROR, errors));
     }
 
-    // Replace req.body/query/params with validated, stripped value
     req[source] = value;
     next();
   };

@@ -4,7 +4,29 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/reviewController');
 const { authenticate } = require('../middleware/auth');
+const { validate } = require('../middleware/validate');
+const { generalLimiter } = require('../middleware/rateLimiter');
+const Joi = require('joi');
 
+const createReview = Joi.object({
+  productId: Joi.string().uuid().required(),
+  orderId: Joi.string().uuid().optional(),
+  rating: Joi.number().integer().min(1).max(5).required(),
+  title: Joi.string().trim().max(200).optional(),
+  comment: Joi.string().trim().min(5).max(2000).required(),
+});
+
+const updateReview = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).optional(),
+  title: Joi.string().trim().max(200).optional(),
+  comment: Joi.string().trim().min(5).max(2000).optional(),
+});
+
+const reviewQuery = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  sort: Joi.string().valid('-createdAt', '-helpfulVotes', 'rating', '-rating').optional(),
+});
 /**
  * @swagger
  * components:
@@ -85,7 +107,7 @@ const { authenticate } = require('../middleware/auth');
  *                     ratingCount: { type: integer, example: 128 }
  *                 timestamp: { type: string, format: date-time }
  */
-router.get('/product/:productId', ctrl.getProductReviews);
+router.get('/product/:productId', validate(reviewQuery, 'query'), ctrl.getProductReviews);
 
 /**
  * @swagger
@@ -125,7 +147,7 @@ router.get('/product/:productId', ctrl.getProductReviews);
  *       404: { description: Product not found }
  *       409: { description: You have already reviewed this product }
  */
-router.post('/', authenticate, ctrl.createReview);
+router.post('/', authenticate, validate(createReview), ctrl.createReview);
 
 /**
  * @swagger
@@ -168,7 +190,7 @@ router.post('/', authenticate, ctrl.createReview);
  *       403: { description: Cannot edit another user's review }
  *       404: { description: Review not found }
  */
-router.put('/:id', authenticate, ctrl.updateReview);
+router.put('/:id', authenticate, validate(updateReview), ctrl.updateReview);
 
 /**
  * @swagger

@@ -9,6 +9,13 @@ const { authorize } = require('../middleware/authorize');
 const { videoUpload } = require('../middleware/upload');
 const { validate } = require('../middleware/validate');
 const { addToCartFromVideo } = require('../validations/cartValidation');
+const { ROLES } = require('../constants');
+
+const isAdmin = authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN);
+const videoFields = videoUpload.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'thumbnail', maxCount: 1 },
+]);
 
 /**
  * @swagger
@@ -172,7 +179,7 @@ router.get('/', videoController.getActiveVideos);
  *       403:
  *         description: Forbidden — admin role required
  */
-router.get('/admin', authenticate, authorize('admin', 'super_admin'), videoController.getAllVideosAdmin);
+router.get('/admin', authenticate, isAdmin, videoController.getAllVideosAdmin);
 
 /**
  * @swagger
@@ -218,7 +225,7 @@ router.get('/admin', authenticate, authorize('admin', 'super_admin'), videoContr
  *       404:
  *         description: Video not found
  */
-router.get('/admin/:id', authenticate, authorize('admin', 'super_admin'), videoController.getVideoById);
+router.get('/admin/:id', authenticate, isAdmin, videoController.getVideoById);
 
 /**
  * @swagger
@@ -285,7 +292,7 @@ router.get('/admin/:id', authenticate, authorize('admin', 'super_admin'), videoC
  *       403:
  *         description: Forbidden
  */
-router.patch('/reorder', authenticate, authorize('admin', 'super_admin'), videoController.reorderVideos);
+router.patch('/reorder', authenticate, isAdmin, videoController.reorderVideos);
 
 // ─── Authenticated User Routes ────────────────────────────────────────────────
 
@@ -435,11 +442,8 @@ router.post(
 router.post(
   '/',
   authenticate,
-  authorize('admin', 'super_admin'),
-  videoUpload.fields([
-    { name: 'video', maxCount: 1 },
-    { name: 'thumbnail', maxCount: 1 },
-  ]),
+  isAdmin,
+  videoFields,
   videoController.createVideo
 );
 
@@ -524,11 +528,8 @@ router.post(
 router.put(
   '/:id',
   authenticate,
-  authorize('admin', 'super_admin'),
-  videoUpload.fields([
-    { name: 'video', maxCount: 1 },
-    { name: 'thumbnail', maxCount: 1 },
-  ]),
+  isAdmin,
+  videoFields,
   videoController.updateVideo
 );
 
@@ -574,6 +575,6 @@ router.put(
  *       404:
  *         description: Video not found
  */
-router.delete('/:id', authenticate, authorize('admin', 'super_admin'), videoController.deleteVideo);
+router.delete('/:id', authenticate, isAdmin, videoController.deleteVideo);
 
 module.exports = router;

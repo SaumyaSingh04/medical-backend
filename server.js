@@ -2,7 +2,6 @@
 
 require('dotenv').config();
 
-// ─── Fail-fast: refuse to start in production with placeholder secrets ──────────────────
 if (process.env.NODE_ENV === 'production') {
   const REQUIRED_SECRETS = [
     'JWT_ACCESS_SECRET',
@@ -25,11 +24,12 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
 }
+
 const http = require('http');
 const app = require('./src/app');
 const { connectDB } = require('./src/config/database');
 const { connectRedis, getRedisClient } = require('./src/config/redis');
-const { initializeJobs } = require('./src/jobs');
+const { initializeJobs, shutdownJobs } = require('./src/jobs');
 const { initializeSockets } = require('./src/sockets');
 const prisma = require('./src/repositories/prismaClient');
 const logger = require('./src/utils/logger');
@@ -37,7 +37,7 @@ const logger = require('./src/utils/logger');
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
-const PORT = process.env.PORT || 5000;
+const PORT    = process.env.PORT    || 5000;
 const APP_NAME = process.env.APP_NAME || 'Medical E-Commerce API';
 
 const server = http.createServer(app);
@@ -48,11 +48,13 @@ const gracefulShutdown = (signal) => {
 
   server.close(async (err) => {
     if (err) {
-      logger.error('Error during server close:', err);
+      logger.error('Error during server close', { error: err.message });
       process.exit(1);
     }
 
     try {
+      await shutdownJobs();
+
       await prisma.$disconnect();
       logger.info('Prisma connection closed.');
 
@@ -65,7 +67,7 @@ const gracefulShutdown = (signal) => {
       logger.info(`${APP_NAME} shut down gracefully.`);
       process.exit(0);
     } catch (shutdownErr) {
-      logger.error('Error during graceful shutdown:', shutdownErr);
+      logger.error('Error during graceful shutdown', { error: shutdownErr.message });
       process.exit(1);
     }
   });
@@ -77,17 +79,19 @@ const gracefulShutdown = (signal) => {
 };
 
 process.on('uncaughtException', (err) => {
-  logger.error('Uncaught Exception:', { message: err.message, stack: err.stack });
+  logger.error('Uncaught Exception', { message: err.message, stack: err.stack });
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
-  logger.error('Unhandled Promise Rejection:', { reason });
+  const message = reason instanceof Error ? reason.message : String(reason);
+  const stack   = reason instanceof Error ? reason.stack   : undefined;
+  logger.error('Unhandled Promise Rejection', { message, stack });
   server.close(() => process.exit(1));
 });
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'));
 
 const bootstrap = async () => {
   try {
@@ -100,7 +104,7 @@ const bootstrap = async () => {
       logger.info(`📚 API Docs: http://localhost:${PORT}/api/v1/docs`);
     });
   } catch (err) {
-    logger.error('Failed to start server:', err);
+    logger.error('Failed to start server', { error: err.message, stack: err.stack });
     process.exit(1);
   }
 };

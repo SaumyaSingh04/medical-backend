@@ -3,8 +3,11 @@
 const analytics = require('../services/analyticsService');
 const prisma = require('../repositories/prismaClient');
 
-// Map endpoint patterns to readable action names
-const ACTION_MAP = [
+// Pre-indexed by method — O(1) method lookup, then small per-method array scan
+// instead of iterating the full ACTION_MAP on every request.
+const ACTION_INDEX = new Map();
+
+for (const entry of [
   { method: 'POST',   pattern: /\/auth\/register$/,         action: 'register' },
   { method: 'POST',   pattern: /\/auth\/login$/,             action: 'login' },
   { method: 'POST',   pattern: /\/auth\/google$/,            action: 'google_login' },
@@ -39,54 +42,74 @@ const ACTION_MAP = [
   { method: 'POST',   pattern: /\/users\/addresses/,         action: 'address_add' },
   { method: 'PUT',    pattern: /\/users\/addresses/,         action: 'address_update' },
   { method: 'DELETE', pattern: /\/users\/addresses/,         action: 'address_delete' },
-];
-
-function resolveAction(method, url) {
-  for (const entry of ACTION_MAP) {
-    if (entry.method === method && entry.pattern.test(url)) return entry.action;
-  }
-  if (method === 'GET') return 'view';
-  if (method === 'POST') return 'create';
-  if (method === 'PUT' || method === 'PATCH') return 'update';
-  if (method === 'DELETE') return 'delete';
-  return 'api_access';
+]) {
+  if (!ACTION_INDEX.has(entry.method)) ACTION_INDEX.set(entry.method, []);
+  ACTION_INDEX.get(entry.method).push(entry);
 }
 
-// Skip analytics paths to avoid infinite loops or noise — tested against originalUrl so /api/v1 prefix works
-const SKIP = /\/(analytics|health|docs|swagger|uploads)\b/;
+const METHOD_FALLBACK = {
+  GET:    'view',
+  POST:   'create',
+  PUT:    'update',
+  PATCH:  'update',
+  DELETE: 'delete',
+};
 
-// Auth sub-paths that are noise — tested against originalUrl so /api/v1 prefix also works
-const SKIP_AUTH = /\/auth\/(refresh-token|send-otp|verify-otp)(\?.*)?$/
+function resolveAction(method, url) {
+  const entries = ACTION_INDEX.get(method);
+  if (entries) {
+    for (const e of entries) {
+      if (e.pattern.test(url)) return e.action;
+    }
+  }
+  return METHOD_FALLBACK[method] ?? 'api_access';
+}
+
+const SKIP      = /\/(analytics|health|docs|swagger|uploads)\b/;
+const SKIP_AUTH = /\/auth\/(refresh-token|send-otp|verify-otp)(\?.*)?$/;
+
+const SESSION_ACTIVITY_INTERVAL_MS = 60_000;
+const THROTTLE_PRUNE_INTERVAL_MS   = 10 * 60_000;
+const THROTTLE_MAX_AGE_MS          = 2 * SESSION_ACTIVITY_INTERVAL_MS;
+
+const _sessionActivityThrottle = new Map();
+
+const _pruneTimer = setInterval(() => {
+  const cutoff = Date.now() - THROTTLE_MAX_AGE_MS;
+  for (const [sid, ts] of _sessionActivityThrottle) {
+    if (ts < cutoff) _sessionActivityThrottle.delete(sid);
+  }
+}, THROTTLE_PRUNE_INTERVAL_MS);
+_pruneTimer.unref();
 
 const analyticsMiddleware = (req, res, next) => {
   if (SKIP.test(req.originalUrl) || SKIP_AUTH.test(req.originalUrl)) return next();
 
-  const url = req.originalUrl;
-  const method = req.method;
+  const { originalUrl: url, method } = req;
   const action = resolveAction(method, url);
 
   res.on('finish', () => {
     if (res.statusCode === 404) return;
 
-    // req.analyticsUserId is set by login()/googleAuth() before response is sent
     const userId = req.user?.id || req.analyticsUserId || null;
+    analytics.track(() =>
+      analytics.trackActivity(
+        { ...req, originalUrl: url, method, user: userId ? { id: userId } : req.user },
+        res,
+        action,
+      )
+    );
 
-    analytics.track(() => analytics.trackActivity(
-      { ...req, originalUrl: url, method, user: userId ? { id: userId } : req.user },
-      res,
-      action
-    ));
-
-    // req.analyticsSessionId is set by login()/googleAuth() (awaited) before res.json() fires
-    // For all other routes it comes from auth middleware via req.user session lookup
     const sid = req.analyticsSessionId || res.locals.analyticsSessionId || null;
     if (sid) {
-      analytics.track(() =>
-        prisma.userSession.updateMany({
-          where: { id: sid },
-          data: { lastActivityAt: new Date() },
-        })
-      );
+      const now  = Date.now();
+      const last = _sessionActivityThrottle.get(sid) || 0;
+      if (now - last >= SESSION_ACTIVITY_INTERVAL_MS) {
+        _sessionActivityThrottle.set(sid, now);
+        analytics.track(() =>
+          prisma.userSession.updateMany({ where: { id: sid }, data: { lastActivityAt: new Date() } })
+        );
+      }
     }
   });
 

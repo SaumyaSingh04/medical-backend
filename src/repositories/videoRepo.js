@@ -2,7 +2,6 @@
 
 const prisma = require('./prismaClient');
 
-// Shared product select — used in all 4 methods for consistent response shape
 const PRODUCT_SELECT = {
   id: true,
   name: true,
@@ -16,44 +15,51 @@ const PRODUCT_SELECT = {
   variants: true,
 };
 
-const findAll = ({ isActive, limit = 20 } = {}) => {
-  const where = {};
-  if (isActive !== undefined) where.isActive = isActive;
+class VideoRepository {
+  findAll({ isActive, limit = 20 } = {}) {
+    const where = {};
+    if (isActive !== undefined) where.isActive = isActive;
+    return prisma.homeVideo.findMany({
+      where,
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      take: limit,
+      include: { product: { select: PRODUCT_SELECT } },
+    });
+  }
 
-  return prisma.homeVideo.findMany({
-    where,
-    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
-    take: limit,
-    include: { product: { select: PRODUCT_SELECT } },
-  });
-};
+  findById(id) {
+    return prisma.homeVideo.findUnique({
+      where: { id },
+      include: { product: { select: PRODUCT_SELECT } },
+    });
+  }
 
-const findById = (id) =>
-  prisma.homeVideo.findUnique({
-    where: { id },
-    include: { product: { select: PRODUCT_SELECT } },
-  });
+  create(data) {
+    return prisma.homeVideo.create({
+      data,
+      include: { product: { select: PRODUCT_SELECT } },
+    });
+  }
 
-const create = (data) =>
-  prisma.homeVideo.create({
-    data,
-    include: { product: { select: PRODUCT_SELECT } },
-  });
+  update(id, data) {
+    return prisma.homeVideo.update({
+      where: { id },
+      data,
+      include: { product: { select: PRODUCT_SELECT } },
+    });
+  }
 
-const update = (id, data) =>
-  prisma.homeVideo.update({
-    where: { id },
-    data,
-    include: { product: { select: PRODUCT_SELECT } },
-  });
+  remove(id) {
+    return prisma.homeVideo.delete({ where: { id } });
+  }
 
-const remove = (id) => prisma.homeVideo.delete({ where: { id } });
+  reorder(updates) {
+    return prisma.$transaction(
+      updates.map(({ id, sortOrder }) =>
+        prisma.homeVideo.update({ where: { id }, data: { sortOrder } })
+      )
+    );
+  }
+}
 
-const reorder = (updates) =>
-  prisma.$transaction(
-    updates.map(({ id, sortOrder }) =>
-      prisma.homeVideo.update({ where: { id }, data: { sortOrder } })
-    )
-  );
-
-module.exports = { findAll, findById, create, update, remove, reorder };
+module.exports = new VideoRepository();

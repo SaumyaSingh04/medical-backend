@@ -1,15 +1,15 @@
 'use strict';
 
 const prisma = require('./prismaClient');
+const { toOrderBy, softDeleteData } = require('./repoUtils');
 
 function toMongo(row) {
   if (!row) return null;
   const { id, imageUrl, imagePublicId, parentId, ...rest } = row;
   return {
     ...rest,
-    _id: id,
-    id,
-    image: imageUrl ? { url: imageUrl, publicId: imagePublicId ?? null } : undefined,
+    _id: id, id,
+    image:  imageUrl ? { url: imageUrl, publicId: imagePublicId ?? null } : undefined,
     parent: parentId ?? null,
   };
 }
@@ -17,28 +17,16 @@ function toMongo(row) {
 function toPrismaData(data) {
   const { image, parent, _id, __v, ...rest } = data;
   const out = { ...rest };
-  if (image !== undefined) {
-    out.imageUrl = image?.url ?? null;
-    out.imagePublicId = image?.publicId ?? null;
-  }
-  if (parent !== undefined) out.parentId = parent ?? null;
+  if (image   !== undefined) { out.imageUrl = image?.url ?? null; out.imagePublicId = image?.publicId ?? null; }
+  if (parent  !== undefined) out.parentId = parent ?? null;
   return out;
-}
-
-function toOrderBy(sort) {
-  if (!sort) return [{ createdAt: 'desc' }];
-  if (typeof sort === 'string') {
-    const field = sort.startsWith('-') ? sort.slice(1) : sort;
-    return [{ [field]: sort.startsWith('-') ? 'desc' : 'asc' }];
-  }
-  return Object.entries(sort).map(([k, v]) => ({ [k]: v === -1 || v === 'desc' ? 'desc' : 'asc' }));
 }
 
 function toWhere(filter = {}) {
   const where = { isDeleted: false };
   for (const [k, v] of Object.entries(filter)) {
-    if (k === '_id' || k === 'id') { where.id = v; continue; }
-    if (k === 'parent')            { where.parentId = v ?? null; continue; }
+    if (k === '_id' || k === 'id') { where.id        = v; continue; }
+    if (k === 'parent')            { where.parentId  = v ?? null; continue; }
     if (k === 'ancestors')         { where.ancestors = { has: v }; continue; }
     where[k] = v;
   }
@@ -47,23 +35,16 @@ function toWhere(filter = {}) {
 
 class CategoryRepository {
   async findById(id) {
-    const row = await prisma.category.findUnique({ where: { id } });
-    return toMongo(row);
+    return toMongo(await prisma.category.findUnique({ where: { id } }));
   }
 
   async findOne(filter) {
-    const row = await prisma.category.findFirst({ where: toWhere(filter) });
-    return toMongo(row);
+    return toMongo(await prisma.category.findFirst({ where: toWhere(filter) }));
   }
 
   async findAll(filter = {}, options = {}) {
     const { sort = { createdAt: -1 }, skip = 0, limit = 20 } = options;
-    const rows = await prisma.category.findMany({
-      where: toWhere(filter),
-      orderBy: toOrderBy(sort),
-      skip,
-      take: limit,
-    });
+    const rows = await prisma.category.findMany({ where: toWhere(filter), orderBy: toOrderBy(sort), skip, take: limit });
     return rows.map(toMongo);
   }
 
@@ -72,33 +53,23 @@ class CategoryRepository {
   }
 
   async create(data) {
-    const row = await prisma.category.create({ data: toPrismaData(data) });
-    return toMongo(row);
+    return toMongo(await prisma.category.create({ data: toPrismaData(data) }));
   }
 
   async updateById(id, data) {
-    const row = await prisma.category.update({ where: { id }, data: toPrismaData(data) });
-    return toMongo(row);
+    return toMongo(await prisma.category.update({ where: { id }, data: toPrismaData(data) }));
   }
 
   async deleteById(id) {
-    const row = await prisma.category.update({
-      where: { id },
-      data: { isDeleted: true, deletedAt: new Date() },
-    });
-    return toMongo(row);
+    return toMongo(await prisma.category.update({ where: { id }, data: softDeleteData }));
   }
 
   async exists(filter) {
-    const count = await prisma.category.count({ where: toWhere(filter) });
-    return count > 0;
+    return (await prisma.category.count({ where: toWhere(filter) })) > 0;
   }
 
   async findRoots() {
-    const rows = await prisma.category.findMany({
-      where: { parentId: null, isActive: true, isDeleted: false },
-      orderBy: { sortOrder: 'asc' },
-    });
+    const rows = await prisma.category.findMany({ where: { parentId: null, isActive: true, isDeleted: false }, orderBy: { sortOrder: 'asc' } });
     return rows.map(toMongo);
   }
 

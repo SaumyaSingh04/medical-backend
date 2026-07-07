@@ -18,7 +18,7 @@ function toPrismaData(data) {
 function toWhere(filter = {}) {
   const where = {};
   for (const [k, v] of Object.entries(filter)) {
-    if (k === '_id' || k === 'id') { where.id = v; continue; }
+    if (k === '_id' || k === 'id') { where.id     = v; continue; }
     if (k === 'user')              { where.userId = v; continue; }
     where[k] = v;
   }
@@ -27,8 +27,7 @@ function toWhere(filter = {}) {
 
 class NotificationRepository {
   async findById(id) {
-    const row = await prisma.notification.findUnique({ where: { id } });
-    return toMongo(row);
+    return toMongo(await prisma.notification.findUnique({ where: { id } }));
   }
 
   async count(filter = {}) {
@@ -36,38 +35,32 @@ class NotificationRepository {
   }
 
   async create(data) {
-    const row = await prisma.notification.create({ data: toPrismaData(data) });
-    return toMongo(row);
+    return toMongo(await prisma.notification.create({ data: toPrismaData(data) }));
   }
 
+  // Single query — no need to findFirst then update
   async updateOne(filter, data) {
-    const existing = await prisma.notification.findFirst({ where: toWhere(filter) });
-    if (!existing) return null;
-    const row = await prisma.notification.update({ where: { id: existing.id }, data });
-    return toMongo(row);
+    const result = await prisma.notification.updateMany({ where: toWhere(filter), data });
+    return result.count > 0 ? result : null;
   }
 
+  // Single query — no need to findFirst then delete
   async deleteOne(filter) {
-    const existing = await prisma.notification.findFirst({ where: toWhere(filter) });
-    if (!existing) return null;
-    return prisma.notification.delete({ where: { id: existing.id } });
+    const result = await prisma.notification.deleteMany({ where: toWhere(filter) });
+    return result.count > 0 ? result : null;
   }
 
   async findUserNotifications(userId, skip = 0, limit = 20, unreadOnly = false) {
     const rows = await prisma.notification.findMany({
       where: unreadOnly ? { userId, isRead: false } : { userId },
       orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
+      skip, take: limit,
     });
     return rows.map(toMongo);
   }
 
   async markAllRead(userId) {
-    await prisma.notification.updateMany({
-      where: { userId, isRead: false },
-      data: { isRead: true, readAt: new Date() },
-    });
+    await prisma.notification.updateMany({ where: { userId, isRead: false }, data: { isRead: true, readAt: new Date() } });
   }
 
   async unreadCount(userId) {

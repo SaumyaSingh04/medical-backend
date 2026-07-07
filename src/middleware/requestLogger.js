@@ -1,13 +1,16 @@
 'use strict';
 
+const { randomUUID } = require('crypto');
 const logger = require('../utils/logger');
 
-// Query params that may carry sensitive values — redact before logging
-const SENSITIVE_PARAMS = new Set(['token', 'password', 'email', 'otp', 'secret', 'key', 'apiKey', 'api_key']);
+// Query params that may carry sensitive values — redact before logging.
+const SENSITIVE_PARAMS = new Set(['token', 'password', 'otp', 'secret', 'key', 'apiKey', 'api_key']);
+
+// Paths that are too noisy to log at http level — downgrade to debug.
+const SKIP_LOG_PATTERN = /\/(health|uploads)\b/;
 
 function redactUrl(originalUrl) {
   try {
-    // originalUrl may be a path+query without a host; prepend a dummy base
     const url = new URL(originalUrl, 'http://x');
     let redacted = false;
     for (const key of url.searchParams.keys()) {
@@ -22,20 +25,30 @@ function redactUrl(originalUrl) {
   }
 }
 
-/**
- * Request logger middleware — logs method, URL (sensitive params redacted), status, and duration
- */
+function truncateUserAgent(ua) {
+  if (!ua) return null;
+  return ua.length > 200 ? ua.slice(0, 200) + '…' : ua;
+}
+
 const requestLogger = (req, res, next) => {
+  // Attach a unique request ID for distributed tracing.
+  req.requestId = randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+
   const start = Date.now();
 
   res.on('finish', () => {
-    const duration = Date.now() - start;
-    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'http';
+    if (SKIP_LOG_PATTERN.test(req.originalUrl)) return;
 
-    logger[level](`${req.method} ${redactUrl(req.originalUrl)} ${res.statusCode} - ${duration}ms`, {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'http';
+
+    logger[level](`${req.method} ${redactUrl(req.originalUrl)} ${status} ${duration}ms`, {
+      requestId: req.requestId,
+      userId: req.user?.id ?? null,
       ip: req.ip,
-      userId: req.user?.id || 'anonymous',
-      userAgent: req.headers['user-agent'],
+      userAgent: truncateUserAgent(req.headers['user-agent']),
     });
   });
 

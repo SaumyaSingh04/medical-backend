@@ -31,7 +31,7 @@ const requestReturn = asyncHandler(async (req, res) => {
 });
 
 const getInvoice = asyncHandler(async (req, res) => {
-  const result = await orderService.generateInvoice(req.params.id);
+  const result = await orderService.generateInvoice(req.params.id, req.user.id, req.user.role);
   sendSuccess(res, 'Invoice generated.', result);
 });
 

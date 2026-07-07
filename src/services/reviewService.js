@@ -36,14 +36,16 @@ class ReviewService {
   async updateReview(reviewId, userId, updateData) {
     const review = await reviewRepo.findById(reviewId);
     if (!review) throw ApiError.notFound('Review not found.');
-    if (review.user.toString() !== userId) throw ApiError.forbidden();
+    const reviewOwner = review.user?.id ?? review.user;
+    if (String(reviewOwner) !== String(userId)) throw ApiError.forbidden();
     return reviewRepo.updateById(reviewId, updateData, { new: true });
   }
 
   async deleteReview(reviewId, userId, role) {
     const review = await reviewRepo.findById(reviewId);
     if (!review) throw ApiError.notFound('Review not found.');
-    if (role !== 'admin' && review.user.toString() !== userId) throw ApiError.forbidden();
+    const reviewOwner = review.user?.id ?? review.user;
+    if (role !== 'admin' && String(reviewOwner) !== String(userId)) throw ApiError.forbidden();
     return reviewRepo.deleteById(reviewId);
   }
 

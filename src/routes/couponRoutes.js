@@ -3,9 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/couponController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuth } = require('../middleware/auth');
 const { authorize } = require('../middleware/authorize');
-const { optionalAuth } = require('../middleware/auth');
 const { ROLES } = require('../constants');
 const { auditLog } = require('../middleware/auditLog');
 

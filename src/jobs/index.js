@@ -1,95 +1,142 @@
 'use strict';
 
+const { Queue, Worker } = require('bullmq');
+const { sendEmail } = require('../utils/mailer');
+const interaktService = require('../services/interaktService');
 const logger = require('../utils/logger');
+// Moved to top-level to fix lazy-load finding; isRedisConfigured/createBullMQConnection
+// are safe to import early — they do not open a connection until called.
+const { isRedisConfigured, createBullMQConnection, getRedisClient } = require('../config/redis');
 
-let emailQueue = null;
-let invoiceQueue = null;
+const WHATSAPP_ALLOWED_TYPES = new Set([
+  'sendOtpWhatsApp',
+  'sendOrderConfirmed',
+  'sendOrderShipped',
+  'sendOrderDelivered',
+  'sendLeadFollowUp',
+]);
+
+let emailQueue    = null;
+let invoiceQueue  = null;
 let whatsappQueue = null;
 
+const workers         = [];
+const bullConnections = [];
+
+const defaultJobOptions = {
+  removeOnComplete: { count: 100 },
+  removeOnFail:     { count: 200 },
+};
+
+function attachWorkerEvents(worker, name) {
+  worker.on('completed', (job)      => logger.info(`[${name}] job ${job.id} completed.`));
+  worker.on('failed',    (job, err) => logger.error(`[${name}] job ${job?.id} failed (attempt ${job?.attemptsMade}): ${err.message}`));
+  worker.on('stalled',   (jobId)    => logger.warn(`[${name}] job ${jobId} stalled — will be retried.`));
+  worker.on('error',     (err)      => logger.error(`[${name}] worker error: ${err.message}`));
+}
+
+function newConnection() {
+  const conn = createBullMQConnection();
+  if (conn) bullConnections.push(conn);
+  return conn;
+}
+
+// Factory: creates a Queue + Worker pair and registers the worker for shutdown
+function makeQueue(name, jobOptions, processor, concurrency, extraWorkerOpts = {}) {
+  const queue = new Queue(name, {
+    connection:       newConnection(),
+    defaultJobOptions: { ...defaultJobOptions, ...jobOptions },
+  });
+  const worker = new Worker(name, processor, {
+    connection: newConnection(),
+    concurrency,
+    ...extraWorkerOpts,
+  });
+  attachWorkerEvents(worker, name.replace('-queue', ''));
+  workers.push(worker);
+  return queue;
+}
+
 const initializeJobs = () => {
-  const { isRedisConfigured, getRedisClient } = require('../config/redis');
   if (!isRedisConfigured() || !getRedisClient()) {
-    logger.warn('Redis unavailable. Jobs will run synchronously.');
+    logger.warn('Redis unavailable. Jobs will run synchronously (fallback mode).');
     return;
   }
 
   try {
-    const Bull = require('bull');
-    const redisConfig = {
-      redis: {
-        host: process.env.REDIS_HOST,
-        port: parseInt(process.env.REDIS_PORT, 10) || 6379,
-        password: process.env.REDIS_PASSWORD || undefined,
+    emailQueue = makeQueue(
+      'email-queue',
+      { attempts: 4, backoff: { type: 'exponential', delay: 2000 } },
+      async (job) => sendEmail(job.data),
+      parseInt(process.env.EMAIL_WORKER_CONCURRENCY, 10) || 5,
+    );
+
+    invoiceQueue = makeQueue(
+      'invoice-queue',
+      { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, delay: 1000 },
+      async (job) => {
+        // Intentional lazy-require: orderService → jobs creates a circular dependency
+        // at module load time if required at the top level.
+        const orderService = require('../services/orderService');
+        await orderService.generateInvoice(job.data.orderId);
       },
-    };
+      parseInt(process.env.INVOICE_WORKER_CONCURRENCY, 10) || 2,
+      { lockDuration: 60000 },
+    );
 
-    emailQueue = new Bull('email-queue', redisConfig);
-    emailQueue.process(async (job) => {
-      const { sendEmail } = require('../utils/mailer');
-      await sendEmail(job.data);
-    });
-    emailQueue.on('completed', (job) => logger.info(`Email job ${job.id} completed.`));
-    emailQueue.on('failed', (job, err) => logger.error(`Email job ${job.id} failed:`, err.message));
-
-    invoiceQueue = new Bull('invoice-queue', redisConfig);
-    invoiceQueue.process(async (job) => {
-      const orderService = require('../services/orderService');
-      await orderService.generateInvoice(job.data.orderId);
-    });
-    invoiceQueue.on('completed', (job) => logger.info(`Invoice job ${job.id} completed.`));
-    invoiceQueue.on('failed', (job, err) => logger.error(`Invoice job ${job.id} failed:`, err.message));
-
-    whatsappQueue = new Bull('whatsapp-queue', redisConfig);
-    whatsappQueue.process(async (job) => {
-      const interaktService = require('../services/interaktService');
-      const { type, phone, args } = job.data;
-      if (typeof interaktService[type] === 'function') {
+    whatsappQueue = makeQueue(
+      'whatsapp-queue',
+      { attempts: 3, backoff: { type: 'exponential', delay: 3000 } },
+      async (job) => {
+        const { type, phone, args } = job.data;
+        if (!WHATSAPP_ALLOWED_TYPES.has(type)) throw new Error(`Blocked unknown WhatsApp job type: "${type}"`);
         await interaktService[type](phone, ...args);
-      }
-    });
-    whatsappQueue.on('completed', (job) => logger.info(`WhatsApp job ${job.id} completed.`));
-    whatsappQueue.on('failed', (job, err) => logger.error(`WhatsApp job ${job.id} failed:`, err.message));
+      },
+      parseInt(process.env.WHATSAPP_WORKER_CONCURRENCY, 10) || 3,
+    );
 
-    logger.info('✅ Bull job queues initialized.');
+    logger.info('✅ BullMQ job queues initialized (email, invoice, whatsapp).');
   } catch (err) {
-    logger.warn('Bull queue initialization failed:', err.message);
+    logger.warn(`BullMQ initialization failed: ${err.message}`);
   }
 };
 
+const shutdownJobs = async () => {
+  logger.info('Closing BullMQ workers…');
+  await Promise.allSettled(workers.map((w) => w.close()));
+  await Promise.allSettled(
+    [emailQueue, invoiceQueue, whatsappQueue].filter(Boolean).map((q) => q.close())
+  );
+  await Promise.allSettled(
+    bullConnections.filter((c) => c?.status === 'ready').map((c) => c.quit())
+  );
+  logger.info('BullMQ workers, queues, and connections closed.');
+};
+
+// ─── Public enqueue helpers ───────────────────────────────────────────────────
+
 const addEmailJob = async (emailData, opts = {}) => {
-  if (emailQueue) {
-    return emailQueue.add(emailData, { attempts: 3, backoff: { type: 'exponential', delay: 2000 }, ...opts });
-  }
-  const { sendEmail } = require('../utils/mailer');
-  return sendEmail(emailData);
+  if (emailQueue) return emailQueue.add('send', emailData, opts);
+  sendEmail(emailData).catch((err) => logger.warn(`[email fallback] ${err.message}`));
 };
 
 const addInvoiceJob = async (orderId, opts = {}) => {
-  if (invoiceQueue) {
-    return invoiceQueue.add({ orderId }, { attempts: 2, delay: 1000, ...opts });
-  }
+  if (invoiceQueue) return invoiceQueue.add('generate', { orderId }, opts);
+  logger.warn(`[invoice fallback] Redis unavailable — invoice for order ${orderId} skipped.`);
 };
 
-/**
- * Enqueue a WhatsApp send. Falls back to direct call when Redis is unavailable.
- * @param {string} type  - interaktService function name (e.g. 'sendOrderConfirmed')
- * @param {string} phone
- * @param {Array}  args  - remaining positional args after phone
- */
 const addWhatsAppJob = async (type, phone, args = [], opts = {}) => {
   if (!phone) return;
-  if (whatsappQueue) {
-    return whatsappQueue.add({ type, phone, args }, { attempts: 3, backoff: { type: 'exponential', delay: 3000 }, ...opts });
+  if (!WHATSAPP_ALLOWED_TYPES.has(type)) {
+    logger.warn(`[whatsapp] Blocked unknown job type: "${type}"`);
+    return;
   }
-  // Synchronous fallback
+  if (whatsappQueue) return whatsappQueue.add('send', { type, phone, args }, opts);
   try {
-    const interaktService = require('../services/interaktService');
-    if (typeof interaktService[type] === 'function') {
-      await interaktService[type](phone, ...args);
-    }
+    await interaktService[type](phone, ...args);
   } catch (err) {
-    logger.warn(`[WhatsApp fallback] ${type} failed:`, err.message);
+    logger.warn(`[whatsapp fallback] ${type} failed: ${err.message}`);
   }
 };
 
-module.exports = { initializeJobs, addEmailJob, addInvoiceJob, addWhatsAppJob };
+module.exports = { initializeJobs, shutdownJobs, addEmailJob, addInvoiceJob, addWhatsAppJob };
