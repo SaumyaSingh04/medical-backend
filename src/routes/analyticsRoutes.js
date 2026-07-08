@@ -7,7 +7,7 @@ const { authenticate } = require('../middleware/auth');
 const { authorize } = require('../middleware/authorize');
 const { ROLES } = require('../constants');
 
-router.use(authenticate, authorize(ROLES.SUPER_ADMIN));
+router.use(authenticate, authorize(ROLES.ADMIN));
 
 /**
  * @swagger

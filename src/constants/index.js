@@ -20,7 +20,7 @@ const HTTP_STATUS = {
 const ROLES = {
   USER: 'user',
   ADMIN: 'admin',
-  SUPER_ADMIN: 'super_admin',
+  // SUPER_ADMIN: 'super_admin',
 };
 
 // ─── CRM Lead Statuses ───────────────────────────────────────────────────────────

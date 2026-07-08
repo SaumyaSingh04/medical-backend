@@ -11,7 +11,7 @@ const { validate } = require('../middleware/validate');
 const { addToCartFromVideo } = require('../validations/cartValidation');
 const { ROLES } = require('../constants');
 
-const isAdmin = authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN);
+const isAdmin = authorize(ROLES.ADMIN);
 const videoFields = videoUpload.fields([
   { name: 'video', maxCount: 1 },
   { name: 'thumbnail', maxCount: 1 },

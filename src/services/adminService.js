@@ -314,7 +314,7 @@ class AdminService {
   }
 
   async updateUserRole(userId, role) {
-    if (![ROLES.USER, ROLES.ADMIN, ROLES.SUPER_ADMIN].includes(role)) throw ApiError.badRequest('Invalid role.');
+    if (![ROLES.USER, ROLES.ADMIN /*, ROLES.SUPER_ADMIN*/].includes(role)) throw ApiError.badRequest('Invalid role.');
     const user = await userRepo.findById(userId);
     if (!user) throw ApiError.notFound('User not found.');
     return userRepo.updateById(userId, { role });

@@ -159,7 +159,7 @@ class OrderService {
     const order = await orderRepo.findWithPayment(orderId);
     if (!order) throw ApiError.notFound('Order not found.');
     const orderUserId = order.user?.id ?? order.user;
-    if (role !== ROLES.ADMIN && role !== ROLES.SUPER_ADMIN && String(orderUserId) !== String(userId)) {
+    if (role !== ROLES.ADMIN && /* role !== ROLES.SUPER_ADMIN && */ String(orderUserId) !== String(userId)) {
       throw ApiError.forbidden();
     }
     return order;
@@ -274,7 +274,7 @@ class OrderService {
     if (!order) throw ApiError.notFound('Order not found.');
 
     const orderUserId = order.user?.id ?? order.user;
-    if (role !== ROLES.ADMIN && role !== ROLES.SUPER_ADMIN && String(orderUserId) !== String(userId)) {
+    if (role !== ROLES.ADMIN && /* role !== ROLES.SUPER_ADMIN && */ String(orderUserId) !== String(userId)) {
       throw ApiError.forbidden();
     }
 

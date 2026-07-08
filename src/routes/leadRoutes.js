@@ -12,7 +12,7 @@ const { auditLog }     = require('../middleware/auditLog');
 
 const { ROLES } = require('../constants');
 
-const isAdminOrSuperAdmin = authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN);
+const isAdminOrSuperAdmin = authorize(ROLES.ADMIN);
 
 // ─── Public (no auth) ─────────────────────────────────────────────────────────
 

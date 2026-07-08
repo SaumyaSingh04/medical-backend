@@ -70,6 +70,6 @@ router.get('/webhook', (req, res) => res.status(200).send('OK'));
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Admin only }
  */
-router.post('/send', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), sendMessage);
+router.post('/send', authenticate, authorize(ROLES.ADMIN), sendMessage);
 
 module.exports = router;

@@ -15,15 +15,15 @@ const { ROLES }             = require('../constants');
 const ApiError              = require('../helpers/ApiError');
 const contactValidation     = require('../validations/contactValidation');
 
-const guardSuperAdminRole = (req, res, next) => {
-  if (req.body.role === ROLES.SUPER_ADMIN && req.user.role !== ROLES.SUPER_ADMIN) {
-    return next(ApiError.forbidden('Only super_admin can assign the super_admin role.'));
-  }
-  next();
-};
+// const guardSuperAdminRole = (req, res, next) => {
+//   if (req.body.role === ROLES.SUPER_ADMIN && req.user.role !== ROLES.SUPER_ADMIN) {
+//     return next(ApiError.forbidden('Only super_admin can assign the super_admin role.'));
+//   }
+//   next();
+// };
 
-const isSuperAdmin = authorize(ROLES.SUPER_ADMIN);
-const isAdmin      = authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN);
+// const isSuperAdmin = authorize(ROLES.SUPER_ADMIN);
+const isAdmin = authorize(ROLES.ADMIN);
 
 // CSRF protection is not required: all routes are protected by JWT Bearer token
 // authentication (Authorization header). Browsers cannot send custom headers
@@ -68,7 +68,7 @@ router.use(authenticate);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/revenue',           isSuperAdmin, ctrl.getRevenueAnalytics);
+router.get('/analytics/revenue',           isAdmin, ctrl.getRevenueAnalytics);
 
 /**
  * @swagger
@@ -108,7 +108,7 @@ router.get('/analytics/revenue',           isSuperAdmin, ctrl.getRevenueAnalytic
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/sales',             isSuperAdmin, ctrl.getSalesAnalytics);
+router.get('/analytics/sales',             isAdmin, ctrl.getSalesAnalytics);
 
 /**
  * @swagger
@@ -146,7 +146,7 @@ router.get('/analytics/sales',             isSuperAdmin, ctrl.getSalesAnalytics)
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/customers',         isSuperAdmin, ctrl.getCustomerAnalytics);
+router.get('/analytics/customers',         isAdmin, ctrl.getCustomerAnalytics);
 
 /**
  * @swagger
@@ -184,7 +184,7 @@ router.get('/analytics/customers',         isSuperAdmin, ctrl.getCustomerAnalyti
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/orders',            isSuperAdmin, ctrl.getOrderAnalytics);
+router.get('/analytics/orders',            isAdmin, ctrl.getOrderAnalytics);
 
 /**
  * @swagger
@@ -228,7 +228,7 @@ router.get('/analytics/orders',            isSuperAdmin, ctrl.getOrderAnalytics)
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/top-products',      isSuperAdmin, ctrl.getTopProducts);
+router.get('/analytics/top-products',      isAdmin, ctrl.getTopProducts);
 
 /**
  * @swagger
@@ -260,7 +260,7 @@ router.get('/analytics/top-products',      isSuperAdmin, ctrl.getTopProducts);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/low-stock',         isSuperAdmin, ctrl.getLowStockAlerts);
+router.get('/analytics/low-stock',         isAdmin, ctrl.getLowStockAlerts);
 
 /**
  * @swagger
@@ -299,7 +299,7 @@ router.get('/analytics/low-stock',         isSuperAdmin, ctrl.getLowStockAlerts)
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/analytics/recent-activities', isSuperAdmin, ctrl.getRecentActivities);
+router.get('/analytics/recent-activities', isAdmin, ctrl.getRecentActivities);
 
 /**
  * @swagger
@@ -340,7 +340,7 @@ router.get('/analytics/recent-activities', isSuperAdmin, ctrl.getRecentActivitie
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/users',              isSuperAdmin, ctrl.listUsers);
+router.get('/users',              isAdmin, ctrl.listUsers);
 
 /**
  * @swagger
@@ -370,7 +370,7 @@ router.get('/users',              isSuperAdmin, ctrl.listUsers);
  *       403: { description: Forbidden — Super Admin only }
  *       404: { description: User not found }
  */
-router.patch('/users/:id/status', isSuperAdmin, auditLog('toggle_status', 'User'), ctrl.toggleUserStatus);
+router.patch('/users/:id/status', isAdmin, auditLog('toggle_status', 'User'), ctrl.toggleUserStatus);
 
 /**
  * @swagger
@@ -400,7 +400,7 @@ router.patch('/users/:id/status', isSuperAdmin, auditLog('toggle_status', 'User'
  *       403: { description: Forbidden — Super Admin only }
  *       404: { description: User not found }
  */
-router.patch('/users/:id/role', isSuperAdmin, guardSuperAdminRole, auditLog('update_role', 'User'), ctrl.updateUserRole);
+router.patch('/users/:id/role', isAdmin, auditLog('update_role', 'User'), ctrl.updateUserRole);
 
 /**
  * @swagger
@@ -452,7 +452,7 @@ router.patch('/users/:id/role', isSuperAdmin, guardSuperAdminRole, auditLog('upd
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/audit-logs', isSuperAdmin, auditLogCtrl.getLogs);
+router.get('/audit-logs', isAdmin, auditLogCtrl.getLogs);
 
 /**
  * @swagger
@@ -481,7 +481,7 @@ router.get('/audit-logs', isSuperAdmin, auditLogCtrl.getLogs);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/export/orders',   isSuperAdmin, exportCtrl.exportOrders);
+router.get('/export/orders',   isAdmin, exportCtrl.exportOrders);
 
 /**
  * @swagger
@@ -500,7 +500,7 @@ router.get('/export/orders',   isSuperAdmin, exportCtrl.exportOrders);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/export/users',    isSuperAdmin, exportCtrl.exportUsers);
+router.get('/export/users',    isAdmin, exportCtrl.exportUsers);
 
 /**
  * @swagger
@@ -519,7 +519,7 @@ router.get('/export/users',    isSuperAdmin, exportCtrl.exportUsers);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/export/products', isSuperAdmin, exportCtrl.exportProducts);
+router.get('/export/products', isAdmin, exportCtrl.exportProducts);
 
 /**
  * @swagger
@@ -538,7 +538,7 @@ router.get('/export/products', isSuperAdmin, exportCtrl.exportProducts);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Super Admin only }
  */
-router.get('/export/leads',    isSuperAdmin, exportCtrl.exportLeads);
+router.get('/export/leads',    isAdmin, exportCtrl.exportLeads);
 
 /**
  * @swagger

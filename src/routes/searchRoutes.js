@@ -115,6 +115,6 @@ router.get('/suggestions', cache(60), ctrl.getSuggestions);
  *       401: { description: Unauthorized }
  *       403: { description: Forbidden — Admin only }
  */
-router.get('/admin', authenticate, authorize(ROLES.ADMIN, ROLES.SUPER_ADMIN), ctrl.adminGlobalSearch);
+router.get('/admin', authenticate, authorize(ROLES.ADMIN), ctrl.adminGlobalSearch);
 
 module.exports = router;
