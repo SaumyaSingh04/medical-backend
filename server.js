@@ -101,7 +101,7 @@ const bootstrap = async () => {
 
     server.listen(PORT, () => {
       logger.info(`🚀 ${APP_NAME} running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
-      logger.info(`📚 API Docs: http://localhost:${PORT}/api/v1/docs`);
+      logger.info(`📚 API Docs: http://localhost:${PORT}/api/docs`);
     });
   } catch (err) {
     logger.error('Failed to start server', { error: err.message, stack: err.stack });
