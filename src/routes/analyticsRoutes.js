@@ -183,7 +183,7 @@ router.get('/most-active-users',    ctrl.getMostActiveUsers);
  *                       id: { type: string, format: uuid }
  *                       action: { type: string, example: order_create }
  *                       method: { type: string, example: POST }
- *                       endpoint: { type: string, example: /api/v1/orders }
+ *                       endpoint: { type: string, example: /api/orders }
  *                       statusCode: { type: integer, example: 201 }
  *                       ipAddress: { type: string }
  *                       createdAt: { type: string, format: date-time }
@@ -354,7 +354,7 @@ router.get('/registration-history', ctrl.getRegistrationHistory);
  *                       userId: { type: string, nullable: true }
  *                       action: { type: string, example: order_create }
  *                       method: { type: string, example: POST }
- *                       endpoint: { type: string, example: /api/v1/orders }
+ *                       endpoint: { type: string, example: /api/orders }
  *                       statusCode: { type: integer, example: 201 }
  *                       ipAddress: { type: string }
  *                       createdAt: { type: string, format: date-time }

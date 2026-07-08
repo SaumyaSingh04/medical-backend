@@ -116,7 +116,7 @@ components:
           example: POST
         endpoint:
           type: string
-          example: /api/v1/auth/login
+          example: /api/auth/login
         statusCode:
           type: integer
           example: 200
@@ -704,7 +704,7 @@ paths:
                 type: string
                 example: |
                   id,userId,action,method,endpoint,statusCode,ipAddress,createdAt
-                  "abc123","user1","login","POST","/api/v1/auth/login","200","1.2.3.4","2026-06-28T00:00:00.000Z"
+                  "abc123","user1","login","POST","/api/auth/login","200","1.2.3.4","2026-06-28T00:00:00.000Z"
         '401':
           description: Unauthorized
         '403':

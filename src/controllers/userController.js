@@ -22,6 +22,11 @@ const uploadAvatar = asyncHandler(async (req, res) => {
   sendSuccess(res, 'Avatar updated.', { avatar: user.avatar });
 });
 
+const lookupPincode = asyncHandler(async (req, res) => {
+  const data = await userService.lookupPincode(req.params.pincode);
+  sendSuccess(res, 'Location fetched.', data);
+});
+
 const getAddresses = asyncHandler(async (req, res) => {
   const addresses = await userService.getAddresses(req.user.id);
   sendSuccess(res, MESSAGES.FETCHED, addresses);
@@ -72,4 +77,4 @@ const getDashboard = asyncHandler(async (req, res) => {
   sendSuccess(res, MESSAGES.FETCHED, data);
 });
 
-module.exports = { getProfile, updateProfile, uploadAvatar, getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, getWishlist, toggleWishlist, removeFromWishlist, clearWishlist, getDashboard };
+module.exports = { getProfile, updateProfile, uploadAvatar, lookupPincode, getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress, getWishlist, toggleWishlist, removeFromWishlist, clearWishlist, getDashboard };

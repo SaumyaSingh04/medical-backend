@@ -8,6 +8,9 @@ const { validate } = require('../middleware/validate');
 const { avatarUpload, handleMulterError } = require('../middleware/upload');
 const v = require('../validations/userValidation');
 
+// ─── Public: pincode lookup (no auth needed) ─────────────────────────────────
+router.get('/pincode/:pincode', ctrl.lookupPincode);
+
 // All user routes require authentication
 router.use(authenticate);
 

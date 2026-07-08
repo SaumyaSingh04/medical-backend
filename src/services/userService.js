@@ -1,5 +1,6 @@
 'use strict';
 
+const axios = require('axios');
 const userRepo = require('../repositories/userRepo');
 const productRepo = require('../repositories/productRepo');
 const orderRepo = require('../repositories/orderRepo');
@@ -46,6 +47,35 @@ class UserService {
     if (!user) throw ApiError.notFound('User not found.');
     if (user.avatar?.publicId) await deleteCloudinaryResource(user.avatar.publicId).catch(() => {});
     return userRepo.updateById(userId, { avatar: { url: file.path, publicId: file.filename } });
+  }
+
+  async lookupPincode(pincode) {
+    try {
+      const { data } = await axios.get(
+        `https://api.postalpincode.in/pincode/${pincode}`,
+        { timeout: 5000 }
+      );
+      const result = Array.isArray(data) && data[0];
+      if (!result || result.Status !== 'Success' || !result.PostOffice?.length) {
+        throw ApiError.notFound('No location found for this pincode.');
+      }
+      const post = result.PostOffice[0];
+      return {
+        pincode,
+        city:    post.District,
+        state:   post.State,
+        country: 'India',
+        postOffices: result.PostOffice.map((p) => ({
+          name:     p.Name,
+          district: p.District,
+          state:    p.State,
+          block:    p.Block,
+        })),
+      };
+    } catch (err) {
+      if (err.statusCode) throw err;
+      throw ApiError.badRequest('Pincode lookup failed. Please enter city and state manually.');
+    }
   }
 
   async getAddresses(userId) {

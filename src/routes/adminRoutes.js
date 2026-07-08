@@ -598,7 +598,7 @@ router.get('/dashboard',      isAdmin, ctrl.getDashboard);
 router.get('/reports/sales',  isAdmin, ctrl.getSalesReport);
 
 // ─── Admin + Super Admin: Lead Management ────────────────────────────────────
-// Lead management is served at /api/v1/leads (see leadRoutes.js)
+// Lead management is served at /api/leads (see leadRoutes.js)
 // Both admin and super_admin have full access via the isAdminOrSuperAdmin guard there.
 
 /**

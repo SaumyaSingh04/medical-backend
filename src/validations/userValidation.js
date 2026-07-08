@@ -23,8 +23,8 @@ const addAddress = Joi.object({
   phone:        phone().required(),
   addressLine1: Joi.string().trim().required(),
   addressLine2: Joi.string().trim().optional(),
-  city:         Joi.string().trim().required(),
-  state:        Joi.string().trim().required(),
+  city:         Joi.string().trim().optional(),   // auto-filled via pincode lookup
+  state:        Joi.string().trim().optional(),   // auto-filled via pincode lookup
   pincode:      Joi.string().pattern(/^\d{6}$/).required(),
   country:      Joi.string().default('India').optional(),
   isDefault:    Joi.boolean().default(false),

@@ -11,7 +11,7 @@ const refreshCookieOptions = () => ({
   secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
   sameSite: process.env.COOKIE_SAME_SITE || 'strict',
   maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: '/api/v1/auth',
+  path: '/api/auth',
 });
 
 const login = asyncHandler(async (req, res) => {
@@ -23,7 +23,7 @@ const login = asyncHandler(async (req, res) => {
 const logout = asyncHandler(async (req, res) => {
   const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
   await authService.logout(req.user.id, refreshToken);
-  res.clearCookie('refreshToken', { path: '/api/v1/auth' });
+  res.clearCookie('refreshToken', { path: '/api/auth' });
   sendSuccess(res, MESSAGES.LOGOUT_SUCCESS);
 });
 
@@ -52,7 +52,7 @@ const forgotPassword = asyncHandler(async (req, res) => {
 
 const resetPassword = asyncHandler(async (req, res) => {
   const result = await authService.resetPassword(req.body.token, req.body.password);
-  res.clearCookie('refreshToken', { path: '/api/v1/auth' });
+  res.clearCookie('refreshToken', { path: '/api/auth' });
   sendSuccess(res, result.message);
 });
 
