@@ -3,8 +3,8 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 const path = require('path');
 
-const DEV_SERVER_URL  = `http://localhost:${process.env.PORT || 5000}/api/v1`;
-const PROD_SERVER_URL = 'https://medical-backend-sand.vercel.app/api/v1';
+const DEV_SERVER_URL  = `http://localhost:${process.env.PORT || 5000}/api`;
+const PROD_SERVER_URL = 'https://medical-backend-sand.vercel.app/api';
 
 const options = {
   definition: {

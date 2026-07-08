@@ -175,14 +175,13 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_DEV_ROUTES === 
 }
 
 // ─── Swagger API Docs ────────────────────────────────────────────────────────
-app.get('/api/v1/docs/swagger.json', (req, res) => {
+app.get('/api/docs/swagger.json', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.json(specs);
 });
 
-app.get('/api/v1/docs', (req, res) => {
-  const apiPrefix = process.env.API_PREFIX || '/api/v1';
-  const specUrl   = `${apiPrefix}/docs/swagger.json`;
+app.get(['/api/docs', '/api/docs/'], (req, res) => {
+  const specUrl = '/api/docs/swagger.json';
 
   res.setHeader('Content-Type', 'text/html');
   res.send(`<!DOCTYPE html>
@@ -366,7 +365,7 @@ app.get('/api/v1/docs', (req, res) => {
 });
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
-app.use(process.env.API_PREFIX || '/api/v1', routes);
+app.use('/api', routes);
 
 // ─── Root ────────────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
